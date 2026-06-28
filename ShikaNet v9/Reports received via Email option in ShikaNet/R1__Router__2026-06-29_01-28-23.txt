@@ -1,0 +1,1736 @@
+[01:31:19] show vlan brief
+
+VLAN Name                             Status    Ports
+---- -------------------------------- --------- -------------------------------
+1    default                          active    
+1002 fddi-default                     act/unsup 
+1003 token-ring-default               act/unsup 
+1004 fddinet-default                  act/unsup 
+1005 trnet-default                    act/unsup 
+==================================================
+[01:31:34] show version
+Cisco IOS XE Software, Version 17.15.04c
+Cisco IOS Software [IOSXE], Virtual XE Software (X86_64_LINUX_IOSD-UNIVERSALK9-M), Version 17.15.4c, RELEASE SOFTWARE (fc2)
+Technical Support: http://www.cisco.com/techsupport
+Copyright (c) 1986-2025 by Cisco Systems, Inc.
+Compiled Fri 26-Sep-25 09:24 by mcpre
+
+
+Cisco IOS-XE software, Copyright (c) 2005-2025 by cisco Systems, Inc.
+All rights reserved.  Certain components of Cisco IOS-XE software are
+licensed under the GNU General Public License ("GPL") Version 2.0.  The
+software code licensed under GPL Version 2.0 is free software that comes
+with ABSOLUTELY NO WARRANTY.  You can redistribute and/or modify such
+GPL code under the terms of GPL Version 2.0.  For more details, see the
+documentation or "License Notice" file accompanying the IOS-XE software,
+or the applicable URL provided on the flyer accompanying the IOS-XE
+software.
+
+
+ROM: IOS-XE ROMMON
+
+AUTOMATION uptime is 18 hours, 17 minutes
+Uptime for this control processor is 18 hours, 18 minutes
+System returned to ROM by reload
+System image file is "bootflash:packages.conf"
+Last reload reason: reload
+
+
+
+This product contains cryptographic features and is subject to United
+States and local country laws governing import, export, transfer and
+use. Delivery of Cisco cryptographic products does not imply
+third-party authority to import, export, distribute or use encryption.
+Importers, exporters, distributors and users are responsible for
+compliance with U.S. and local country laws. By using this product you
+agree to comply with applicable laws and regulations. If you are unable
+to comply with U.S. and local laws, return this product immediately.
+
+A summary of U.S. laws governing Cisco cryptographic products may be found at:
+http://www.cisco.com/wwl/export/crypto/tool/stqrg.html
+
+If you require further assistance please contact us by sending email to
+export@cisco.com.
+
+License Level: 
+License Type: Perpetual
+Next reload license Level: 
+
+Addon License Level: 
+Addon License Type: Subscription
+Next reload addon license Level: 
+
+The current throughput level is 20000 kbps 
+
+
+Smart Licensing Status: Smart Licensing Using Policy
+
+cisco C8000V (VXE) processor (revision VXE) with 1655530K/3075K bytes of memory.
+Processor board ID 9LRAVIYVMYK
+Router operating mode: Autonomous
+3 Gigabit Ethernet interfaces
+32768K bytes of non-volatile configuration memory.
+3959732K bytes of physical memory.
+11526144K bytes of virtual hard disk at bootflash:.
+
+Configuration register is 0x2102
+
+==================================================
+[01:31:35] show ip interface brief
+Interface              IP-Address      OK? Method Status                Protocol
+GigabitEthernet1       10.10.20.148    YES other  up                    up      
+GigabitEthernet2       unassigned      YES NVRAM  up                    up      
+GigabitEthernet3       192.168.10.1    YES manual up                    up      
+Loopback10             10.10.10.10     YES other  up                    up      
+Loopback100            192.168.0.5     YES other  up                    up      
+==================================================
+[01:31:36] show cdp neighbors detail
+% CDP is not enabled
+==================================================
+[01:31:37] show running-config
+Building configuration...
+
+Current configuration : 7238 bytes
+!
+! Last configuration change at 14:46:49 UTC Sun Jun 28 2026 by jaduziya
+!
+version 17.15
+service timestamps debug datetime msec
+service timestamps log datetime msec
+service password-encryption
+platform qfp utilization monitor load 80
+platform sslvpn use-pd
+platform console virtual
+!
+hostname AUTOMATION
+!
+boot-start-marker
+boot-end-marker
+!
+!
+vrf definition Mgmt-vrf
+ !
+ address-family ipv4
+ exit-address-family
+ !
+ address-family ipv6
+ exit-address-family
+!
+aaa new-model
+!
+!
+aaa group server tacacs+ labtac
+ server name sandboxtacacs
+ ip tacacs source-interface GigabitEthernet1
+!
+aaa authentication login default group labtac local
+aaa authentication login netconf-authn group labtac local
+aaa authorization exec default group labtac local if-authenticated 
+aaa authorization exec netconf-authz group labtac local 
+aaa authorization commands 1 default group labtac local if-authenticated 
+aaa authorization commands 15 default group labtac local if-authenticated 
+!
+!
+aaa session-id common
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+no ip domain lookup
+ip domain name lab.devnetsandbox.local
+!
+ip dhcp pool mydhcp
+ network 192.168.1.0 255.255.255.0
+ default-router 192.168.1.1 
+!
+!
+!
+login on-success log
+!
+!
+subscriber templating
+!
+!
+!
+crypto pki trustpoint TP-self-signed-2996086467
+ enrollment selfsigned
+ subject-name cn=IOS-Self-Signed-Certificate-2996086467
+ revocation-check none
+ rsakeypair TP-self-signed-2996086467
+ hash sha512
+!
+crypto pki trustpoint SLA-TrustPoint
+ enrollment pkcs12
+ revocation-check crl
+ hash sha512
+!
+!
+crypto pki certificate chain TP-self-signed-2996086467
+ certificate self-signed 01
+  30820330 30820218 A0030201 02020101 300D0609 2A864886 F70D0101 0D050030 
+  31312F30 2D060355 04030C26 494F532D 53656C66 2D536967 6E65642D 43657274 
+  69666963 6174652D 32393936 30383634 3637301E 170D3236 30313035 30393333 
+  33375A17 0D333630 31303530 39333333 375A3031 312F302D 06035504 030C2649 
+  4F532D53 656C662D 5369676E 65642D43 65727469 66696361 74652D32 39393630 
+  38363436 37308201 22300D06 092A8648 86F70D01 01010500 0382010F 00308201 
+  0A028201 0100E71D 5A4B848E 9846F9F2 5D461752 1F06D9F7 390D076B 560F61E2 
+  D5D7901F 1FC34185 744C210A 24EC0D3A D157AC06 4520F49A F96FDBD3 72CBF2F2 
+  2590E10F 42FDBC48 0CC3DA6C D54789CB F4870366 6A81B01D 928E6A7D 07A95A9C 
+  D5C92EC0 3505CB74 DB1F9BC7 099DB5D7 6B635C1B 6D2FC3E1 521CAF16 2E68DA72 
+  8384942A 669E423A 63647E2D 25386756 5F818C54 578E35D5 C68114E9 9DC13D94 
+  E6E1F774 8F6F8F2C 5CAF5285 FAFDE66B 1F009971 12FEC0FA 61DA67A9 E8A57B14 
+  2AA96EBA 3BBA9D8A 4236878E 3A176BE1 C1769A75 88FEB578 80D0C00D 82293585 
+  F55D4808 DC575AF0 4BC92859 301409D8 87E0C89F 7938DF46 8595D697 5C3ACECB 
+  4BC026C4 A1BB0203 010001A3 53305130 1D060355 1D0E0416 0414CF56 B094E61F 
+  50C20319 949CF0AB 82419585 10CA301F 0603551D 23041830 168014CF 56B094E6 
+  1F50C203 19949CF0 AB824195 8510CA30 0F060355 1D130101 FF040530 030101FF 
+  300D0609 2A864886 F70D0101 0D050003 82010100 280CE4EC 501AD195 F8A58947 
+  E93964CA B17DCBC0 4521ADB7 8AB7AF7F 45E768F7 40E03BDC 033EF179 0B1EF4EA 
+  956B973A 01C24188 9209202D 57A8343B BA3A043D E34FC094 123653CC 39071992 
+  B843010E 2B0D6EC4 A92217F8 ECDC4DD5 D869A892 FBC3336F 7412047B 73EA50F0 
+  0EA48ED0 8E364A64 D49C4421 B1013CD5 5C82F628 134098AE 4E8C65AB 2F57867C 
+  73A4B8C3 B058DD41 DDB98883 EBF23D4F 9754A011 95D6794C 10701EC5 09DDBE6D 
+  8AE86BBC 76E97E33 BF6E970D C0D5F00D DB1B5FF0 60A436D2 5890502C 50511737 
+  EB539CC8 03E32259 C88C944A B145B545 DB584D10 9891DCEC 635604B6 69233937 
+  C5124A4F BB879376 342E0040 5C914576 66B51089
+  	quit
+crypto pki certificate chain SLA-TrustPoint
+ certificate ca 01
+  30820321 30820209 A0030201 02020101 300D0609 2A864886 F70D0101 0B050030 
+  32310E30 0C060355 040A1305 43697363 6F312030 1E060355 04031317 43697363 
+  6F204C69 63656E73 696E6720 526F6F74 20434130 1E170D31 33303533 30313934 
+  3834375A 170D3338 30353330 31393438 34375A30 32310E30 0C060355 040A1305 
+  43697363 6F312030 1E060355 04031317 43697363 6F204C69 63656E73 696E6720 
+  526F6F74 20434130 82012230 0D06092A 864886F7 0D010101 05000382 010F0030 
+  82010A02 82010100 A6BCBD96 131E05F7 145EA72C 2CD686E6 17222EA1 F1EFF64D 
+  CBB4C798 212AA147 C655D8D7 9471380D 8711441E 1AAF071A 9CAE6388 8A38E520 
+  1C394D78 462EF239 C659F715 B98C0A59 5BBB5CBD 0CFEBEA3 700A8BF7 D8F256EE 
+  4AA4E80D DB6FD1C9 60B1FD18 FFC69C96 6FA68957 A2617DE7 104FDC5F EA2956AC 
+  7390A3EB 2B5436AD C847A2C5 DAB553EB 69A9A535 58E9F3E3 C0BD23CF 58BD7188 
+  68E69491 20F320E7 948E71D7 AE3BCC84 F10684C7 4BC8E00F 539BA42B 42C68BB7 
+  C7479096 B4CB2D62 EA2F505D C7B062A4 6811D95B E8250FC4 5D5D5FB8 8F27D191 
+  C55F0D76 61F9A4CD 3D992327 A8BB03BD 4E6D7069 7CBADF8B DF5F4368 95135E44 
+  DFC7C6CF 04DD7FD1 02030100 01A34230 40300E06 03551D0F 0101FF04 04030201 
+  06300F06 03551D13 0101FF04 05300301 01FF301D 0603551D 0E041604 1449DC85 
+  4B3D31E5 1B3E6A17 606AF333 3D3B4C73 E8300D06 092A8648 86F70D01 010B0500 
+  03820101 00507F24 D3932A66 86025D9F E838AE5C 6D4DF6B0 49631C78 240DA905 
+  604EDCDE FF4FED2B 77FC460E CD636FDB DD44681E 3A5673AB 9093D3B1 6C9E3D8B 
+  D98987BF E40CBD9E 1AECA0C2 2189BB5C 8FA85686 CD98B646 5575B146 8DFC66A8 
+  467A3DF4 4D565700 6ADF0F0D CF835015 3C04FF7C 21E878AC 11BA9CD2 55A9232C 
+  7CA7B7E6 C1AF74F6 152E99B7 B1FCF9BB E973DE7F 5BDDEB86 C71E3B49 1765308B 
+  5FB0DA06 B92AFE7F 494E8A9E 07B85737 F3A58BE1 1A48A229 C37C1E69 39F08678 
+  80DDCD16 D6BACECA EEBC7CF9 8428787B 35202CDC 60E4616A B623CDBD 230E3AFB 
+  418616A9 4093E049 4D10AB75 27E86F73 932E35B5 8862FDAE 0275156F 719BB2F0 
+  D697DF7F 28
+  	quit
+!
+!
+license udi pid C8000V sn 9LRAVIYVMYK
+memory free low-watermark processor 204144
+diagnostic bootup level minimal
+!
+!
+!
+enable secret 9 $9$QFKir/5RZtFBuk$J8E4iGPu/85pKFwChUkcm1Gz0fsTmjE8eT9bqit4YM2
+enable password 7 106D580A061843595F507F
+!
+username admin privilege 15 secret 9 $9$xfJaj985/31C8k$4zR/SzPia87KuG0p9XZIrcS31V8i4skDuWbK/3HmU/Q
+username dev privilege 15 secret 9 $9$HbcDio7UIfRWdU$eP5o.FgLB1p9S/ckgeXWsSluf1io6F5Uj8JR6e/Y9cE
+!
+redundancy
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+interface Loopback10
+ description NETCONF Lab
+ ip address 10.10.10.10 255.255.255.255
+!
+interface Loopback100
+ description RESTCONF Lab
+ ip address 192.168.0.5 255.255.255.255
+!
+interface GigabitEthernet1
+ ip address 10.10.20.148 255.255.255.0
+ negotiation auto
+!
+interface GigabitEthernet2
+ description DevNet was here
+ no ip address
+ negotiation auto
+!
+interface GigabitEthernet3
+ ip address 192.168.10.1 255.255.255.0
+ negotiation auto
+!
+ip default-gateway 10.10.20.254
+ip forward-protocol nd
+ip forward-protocol udp
+!
+ip http server
+ip http authentication local
+ip http secure-server
+ip route 0.0.0.0 0.0.0.0 10.10.20.254
+ip ssh bulk-mode 131072
+!
+tacacs server sandboxtacacs
+ address ipv4 10.17.248.43
+ key 7 08285F4B0A18114F19
+!
+!
+!
+!
+control-plane
+!
+!
+line con 0
+ stopbits 1
+line aux 0
+line vty 0 4
+ transport input ssh
+!
+!
+!
+!
+!
+!
+!
+telemetry ietf subscription 2011
+ encoding encode-kvgpb
+ filter xpath /ios:native
+ receiver-type protocol
+ stream yang-push
+ update-policy periodic 6000
+ receiver name yangsuite
+telemetry receiver protocol yangsuite
+ host name yangsuite-telemetry.cisco.com 58500
+ protocol grpc-tcp
+netconf-yang
+restconf
+yang-interfaces aaa authentication method-list netconf-authn
+yang-interfaces aaa authorization method-list netconf-authz
+end
+
+==================================================
+[01:31:37] show startup-config
+Using 2780 out of 33554432 bytes
+!
+! Last configuration change at 12:36:49 UTC Mon Jun 22 2026 by admin
+!
+version 17.15
+service timestamps debug datetime msec
+service timestamps log datetime msec
+service password-encryption
+platform qfp utilization monitor load 80
+platform sslvpn use-pd
+platform console virtual
+!
+hostname Cat8kv
+!
+boot-start-marker
+boot-end-marker
+!
+!
+vrf definition Mgmt-vrf
+ !
+ address-family ipv4
+ exit-address-family
+ !
+ address-family ipv6
+ exit-address-family
+!
+aaa new-model
+!
+!
+aaa group server tacacs+ labtac
+ server name sandboxtacacs
+ ip tacacs source-interface GigabitEthernet1
+!
+aaa authentication login default group labtac local
+aaa authentication login netconf-authn group labtac local
+aaa authorization exec default group labtac local if-authenticated 
+aaa authorization exec netconf-authz group labtac local 
+aaa authorization commands 1 default group labtac local if-authenticated 
+aaa authorization commands 15 default group labtac local if-authenticated 
+!
+!
+aaa session-id common
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+no ip domain lookup
+ip domain name lab.devnetsandbox.local
+!
+!
+!
+login on-success log
+!
+!
+subscriber templating
+!
+!
+!
+crypto pki trustpoint TP-self-signed-2996086467
+ enrollment selfsigned
+ subject-name cn=IOS-Self-Signed-Certificate-2996086467
+ revocation-check none
+ rsakeypair TP-self-signed-2996086467
+ hash sha512
+!
+crypto pki trustpoint SLA-TrustPoint
+ enrollment pkcs12
+ revocation-check crl
+ hash sha512
+!
+!
+crypto pki certificate chain TP-self-signed-2996086467
+ certificate self-signed 01 nvram:IOS-Self-Sig#1.cer
+crypto pki certificate chain SLA-TrustPoint
+ certificate ca 01 nvram:CiscoLicensi#1CA.cer
+!
+!
+license udi pid C8000V sn 9LRAVIYVMYK
+memory free low-watermark processor 204144
+diagnostic bootup level minimal
+!
+!
+!
+enable secret 9 $9$QFKir/5RZtFBuk$J8E4iGPu/85pKFwChUkcm1Gz0fsTmjE8eT9bqit4YM2
+enable password 7 106D580A061843595F507F
+!
+username admin privilege 15 secret 9 $9$xfJaj985/31C8k$4zR/SzPia87KuG0p9XZIrcS31V8i4skDuWbK/3HmU/Q
+!
+redundancy
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+interface GigabitEthernet1
+ ip address 10.10.20.148 255.255.255.0
+ negotiation auto
+!
+interface GigabitEthernet2
+ no ip address
+ shutdown
+ negotiation auto
+!
+interface GigabitEthernet3
+ no ip address
+ shutdown
+ negotiation auto
+!
+ip default-gateway 10.10.20.254
+ip forward-protocol nd
+ip forward-protocol udp
+!
+ip http server
+ip http authentication local
+ip http secure-server
+ip route 0.0.0.0 0.0.0.0 10.10.20.254
+ip ssh bulk-mode 131072
+!
+tacacs server sandboxtacacs
+ address ipv4 10.17.248.43
+ key 7 08285F4B0A18114F19
+!
+!
+!
+!
+control-plane
+!
+!
+line con 0
+ stopbits 1
+line aux 0
+line vty 0 4
+ transport input ssh
+!
+!
+!
+!
+!
+!
+!
+netconf-yang
+restconf
+yang-interfaces aaa authentication method-list netconf-authn
+yang-interfaces aaa authorization method-list netconf-authz
+end
+
+==================================================
+[01:31:38] show clock
+*15:29:09.979 UTC Sun Jun 28 2026
+==================================================
+[01:31:38] show users
+    Line       User       Host(s)              Idle       Location
+*434 vty 0     jaxnaipao  idle                 00:00:00 43.245.57.249
+
+  Interface    User               Mode         Idle     Peer Address
+
+==================================================
+[01:31:39] show arp
+Protocol  Address          Age (min)  Hardware Addr   Type   Interface
+Internet  10.10.20.148            -   0050.56bf.34d7  ARPA   GigabitEthernet1
+Internet  10.10.20.254           40   0050.56bf.85d9  ARPA   GigabitEthernet1
+Internet  192.168.10.1            -   0050.56bf.42f3  ARPA   GigabitEthernet3
+==================================================
+[01:31:46] show logging
+Syslog logging: enabled (0 messages dropped, 3 messages rate-limited, 0 flushes, 0 overruns, xml disabled, filtering disabled)
+
+No Active Message Discriminator.
+
+
+
+No Inactive Message Discriminator.
+
+
+    Console logging: level debugging, 7064 messages logged, xml disabled,
+                     filtering disabled
+    Monitor logging: level debugging, 22 messages logged, xml disabled,
+                     filtering disabled
+    Buffer logging:  level debugging, 7064 messages logged, xml disabled,
+                    filtering disabled
+    Exception Logging: size (4096 bytes)
+    Count and timestamp logging messages: disabled
+    Persistent logging: disabled
+
+No active filter modules.
+
+    Trap logging: level informational, 7069 message lines logged
+        Logging Source-Interface:       VRF Name:
+    TLS Profiles: 
+
+Log Buffer (131072 bytes):
+om 172.173.231.80:0 for rest over http.
+*Jun 28 13:40:44.505: %SSH-5-SSH2_SESSION: SSH2 Session request from 165.225.240.160 (tty = 2) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 13:40:44.957: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: gerard.valk] [Source: 165.225.240.160] [localport: 22] at 13:40:44 UTC Sun Jun 28 2026
+*Jun 28 13:40:44.957: %SSH-5-SSH2_USERAUTH: User 'gerard.valk' authentication for SSH2 Session from 165.225.240.160 (tty = 2) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 13:40:47.224: %SYS-6-LOGOUT: User gerard.valk has exited tty session 436(165.225.240.160)
+*Jun 28 13:40:47.225: %SSH-5-SSH2_CLOSE: SSH2 Session from 165.225.240.160 (tty = 2) for user '' using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 13:40:53.812: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:41:07.817: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:41:09.477: %SSH-5-SSH2_SESSION: SSH2 Session request from 165.225.240.160 (tty = 2) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 13:41:09.928: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: gerard.valk] [Source: 165.225.240.160] [localport: 22] at 13:41:09 UTC Sun Jun 28 2026
+*Jun 28 13:41:09.928: %SSH-5-SSH2_USERAUTH: User 'gerard.valk' authentication for SSH2 Session from 165.225.240.160 (tty = 2) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 13:41:12.213: %SYS-6-LOGOUT: User gerard.valk has exited tty session 436(165.225.240.160)
+*Jun 28 13:41:12.214: %SSH-5-SSH2_CLOSE: SSH2 Session from 165.225.240.160 (tty = 2) for user '' using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 13:41:25.810: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:41:32.614: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 2) for user '' using crypto cipher '' closed
+*Jun 28 13:41:53.812: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:42:07.810: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:42:12.812: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:42:25.812: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:42:38.978: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 2) for user '' using crypto cipher '' closed
+*Jun 28 13:42:53.808: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:43:07.810: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:43:25.806: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:43:45.451: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 2) for user '' using crypto cipher '' closed
+*Jun 28 13:43:53.807: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:44:07.806: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:44:13.804: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:44:25.806: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:44:51.820: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 2) for user '' using crypto cipher '' closed
+*Jun 28 13:44:53.806: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:45:07.804: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:45:13.016: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:45:25.804: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:45:53.804: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:45:58.195: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 2) for user '' using crypto cipher '' closed
+*Jun 28 13:46:00.187: %SSH-5-SSH2_SESSION: SSH2 Session request from 10.20.0.4 (tty = 2) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 13:46:00.418: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: cat8kaotest] [Source: 10.20.0.4] [localport: 22] at 13:46:00 UTC Sun Jun 28 2026
+*Jun 28 13:46:00.418: %SSH-5-SSH2_USERAUTH: User 'cat8kaotest' authentication for SSH2 Session from 10.20.0.4 (tty = 2) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 13:46:01.283: %SYS-6-LOGOUT: User cat8kaotest has exited tty session 436(10.20.0.4)
+*Jun 28 13:46:01.283: %SSH-5-SSH2_CLOSE: SSH2 Session from 10.20.0.4 (tty = 2) for user '' using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 13:46:02.608: %DMI-5-AUTH_PASSED: R0/0: dmiauthd: User 'jaduziya' authenticated successfully from 5.31.229.218:37450  for netconf over ssh. External groups: PRIV15
+*Jun 28 13:46:07.805: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:46:12.813: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:46:25.804: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:46:53.802: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:47:04.559: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 2) for user '' using crypto cipher '' closed
+*Jun 28 13:47:07.801: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:47:12.806: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:47:25.800: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:47:53.802: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:48:08.007: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:48:10.938: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 2) for user '' using crypto cipher '' closed
+*Jun 28 13:48:13.799: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:48:25.800: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:48:53.800: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:49:07.806: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:49:14.800: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:49:17.304: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 2) for user '' using crypto cipher '' closed
+*Jun 28 13:49:25.798: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:49:53.798: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:50:07.799: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:50:13.799: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:50:23.678: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 2) for user '' using crypto cipher '' closed
+*Jun 28 13:50:25.797: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:50:53.800: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:51:07.798: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:51:12.802: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:51:25.797: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:51:30.045: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 2) for user '' using crypto cipher '' closed
+*Jun 28 13:51:53.795: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:51:56.287: %SSH-5-SSH2_SESSION: SSH2 Session request from 10.20.0.4 (tty = 2) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 13:51:56.518: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: cat8kaotest] [Source: 10.20.0.4] [localport: 22] at 13:51:56 UTC Sun Jun 28 2026
+*Jun 28 13:51:56.518: %SSH-5-SSH2_USERAUTH: User 'cat8kaotest' authentication for SSH2 Session from 10.20.0.4 (tty = 2) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 13:51:57.585: %SYS-6-LOGOUT: User cat8kaotest has exited tty session 436(10.20.0.4)
+*Jun 28 13:51:57.585: %SSH-5-SSH2_CLOSE: SSH2 Session from 10.20.0.4 (tty = 2) for user '' using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 13:52:03.122: %SSH-5-SSH2_CLOSE: SSH2 Session from 43.245.57.105 (tty = 0) for user '' using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 13:52:07.795: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:52:13.795: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:52:25.795: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:52:36.414: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 13:52:54.018: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:53:07.796: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:53:25.795: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:53:42.789: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 13:53:53.794: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:54:07.792: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:54:12.794: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:54:25.793: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:54:49.169: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 13:54:53.797: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:55:07.791: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:55:12.802: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:55:25.792: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:55:49.487: %DMI-5-AUTH_PASSED: R0/0: dmiauthd: User 'jaduziya' authenticated successfully from 5.31.229.218:37403  for netconf over ssh. External groups: PRIV15
+*Jun 28 13:55:53.791: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:55:55.534: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 13:56:07.791: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:56:12.791: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:56:20.454: %SYS-6-TTY_EXPIRE_TIMER: (exec timer expired, tty 435 (5.31.229.218)), user jaduziya
+*Jun 28 13:56:20.454: %SYS-6-LOGOUT: User jaduziya has exited tty session 435(5.31.229.218)
+*Jun 28 13:56:20.454: %SSH-5-SSH2_CLOSE: SSH2 Session from 5.31.229.218 (tty = 1) for user 'jaduziya' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 13:56:25.796: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:56:53.790: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:57:01.902: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 13:57:07.788: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:57:25.790: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:57:53.787: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:58:04.650: %SSH-5-SSH2_SESSION: SSH2 Session request from 10.20.0.4 (tty = 0) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 13:58:04.880: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: cat8kaotest] [Source: 10.20.0.4] [localport: 22] at 13:58:04 UTC Sun Jun 28 2026
+*Jun 28 13:58:04.880: %SSH-5-SSH2_USERAUTH: User 'cat8kaotest' authentication for SSH2 Session from 10.20.0.4 (tty = 0) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 13:58:05.744: %SYS-6-LOGOUT: User cat8kaotest has exited tty session 434(10.20.0.4)
+*Jun 28 13:58:05.744: %SSH-5-SSH2_CLOSE: SSH2 Session from 10.20.0.4 (tty = 0) for user '' using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 13:58:07.790: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:58:08.393: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 13:58:13.789: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:58:25.786: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:58:53.788: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:59:07.784: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:59:14.768: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 13:59:14.787: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:59:25.786: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 13:59:53.993: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:00:07.782: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:00:12.787: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:00:21.147: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 14:00:25.786: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:00:53.782: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:01:07.791: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:01:25.785: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:01:27.646: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 14:01:53.782: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:02:07.783: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:02:13.780: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:02:25.781: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:02:34.015: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 14:02:53.781: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:03:07.781: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:03:25.778: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:03:40.392: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 14:03:53.052: %SSH-5-SSH2_SESSION: SSH2 Session request from 10.20.0.4 (tty = 0) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:03:53.299: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: cat8kaotest] [Source: 10.20.0.4] [localport: 22] at 14:03:53 UTC Sun Jun 28 2026
+*Jun 28 14:03:53.299: %SSH-5-SSH2_USERAUTH: User 'cat8kaotest' authentication for SSH2 Session from 10.20.0.4 (tty = 0) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:03:53.779: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:03:54.168: %SYS-6-LOGOUT: User cat8kaotest has exited tty session 434(10.20.0.4)
+*Jun 28 14:03:54.169: %SSH-5-SSH2_CLOSE: SSH2 Session from 10.20.0.4 (tty = 0) for user '' using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:04:07.776: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:04:12.780: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:04:17.780: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:04:25.780: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:04:46.761: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 14:04:53.776: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:04:54.382: %DMI-5-AUTH_PASSED: R0/0: dmiauthd: User 'jaduziya' authenticated successfully from 5.31.229.218:37466  for netconf over ssh. External groups: PRIV15
+*Jun 28 14:04:56.887: %SYS-5-CONFIG_P: Configured programmatically by process iosp_dmiauthd_conn_100001_vty_100001 from console as jaduziya on vty4294966926
+*Jun 28 14:04:56.877: %DMI-5-CONFIG_I: R0/0: dmiauthd: Configured from NETCONF/RESTCONF by jaduziya, transaction-id 11624
+*Jun 28 14:05:05.471: %SSH-5-SSH2_SESSION: SSH2 Session request from 223.190.82.89 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:05:07.779: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:05:22.427: %SSH-5-SSH2_SESSION: SSH2 Session request from 5.31.229.218 (tty = 1) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:05:25.778: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:05:35.247: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: jaduziya] [Source: 5.31.229.218] [localport: 22] at 14:05:35 UTC Sun Jun 28 2026
+*Jun 28 14:05:35.247: %SSH-5-SSH2_USERAUTH: User 'jaduziya' authentication for SSH2 Session from 5.31.229.218 (tty = 1) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:05:38.102: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 223.190.82.89 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:05:38.103: %SSH-5-SSH2_CLOSE: SSH2 Session from 223.190.82.89 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:05:48.181: %SSH-5-SSH2_SESSION: SSH2 Session request from 223.190.82.89 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:05:53.131: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 2) for user '' using crypto cipher '' closed
+*Jun 28 14:05:53.784: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:06:07.780: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:06:13.777: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:06:25.778: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:06:53.985: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:06:59.497: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 2) for user '' using crypto cipher '' closed
+*Jun 28 14:07:00.969: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 223.190.82.89 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:07:00.970: %SSH-5-SSH2_CLOSE: SSH2 Session from 223.190.82.89 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:07:07.776: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:07:25.774: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:07:53.776: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:08:05.865: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 14:08:07.773: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:08:13.774: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:08:25.774: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:08:53.773: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:09:07.775: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:09:12.248: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 14:09:14.771: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:09:25.774: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:09:52.413: %SSH-5-SSH2_SESSION: SSH2 Session request from 10.20.0.4 (tty = 0) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:09:52.650: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: cat8kaotest] [Source: 10.20.0.4] [localport: 22] at 14:09:52 UTC Sun Jun 28 2026
+*Jun 28 14:09:52.650: %SSH-5-SSH2_USERAUTH: User 'cat8kaotest' authentication for SSH2 Session from 10.20.0.4 (tty = 0) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:09:53.518: %SYS-6-LOGOUT: User cat8kaotest has exited tty session 434(10.20.0.4)
+*Jun 28 14:09:53.518: %SSH-5-SSH2_CLOSE: SSH2 Session from 10.20.0.4 (tty = 0) for user '' using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:09:53.779: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:10:07.779: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:10:13.771: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:10:15.950: %SSH-5-SSH2_SESSION: SSH2 Session request from 223.190.82.89 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:10:18.614: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 2) for user '' using crypto cipher '' closed
+*Jun 28 14:10:25.772: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:10:52.150: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 223.190.82.89 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:10:52.150: %SSH-5-SSH2_CLOSE: SSH2 Session from 223.190.82.89 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:10:53.769: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:11:07.769: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:11:12.771: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:11:25.000: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 14:11:25.978: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:11:53.770: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:12:07.842: %SSH-5-SSH2_SESSION: SSH2 Session request from 223.190.82.89 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:12:07.767: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:12:12.770: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:12:25.772: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:12:31.369: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 2) for user '' using crypto cipher '' closed
+*Jun 28 14:12:33.455: %SSH-5-SSH2_SESSION: SSH2 Session request from 108.129.87.165 (tty = 2) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:12:36.213: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 108.129.87.165 (tty = 2) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:12:36.213: %SSH-5-SSH2_CLOSE: SSH2 Session from 108.129.87.165 (tty = 2) for user '' using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:12:38.720: %SSH-5-SSH2_SESSION: SSH2 Session request from 106.195.43.113 (tty = 2) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:12:41.395: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: shopping.sudhanshu] [Source: 223.190.82.89] [localport: 22] at 14:12:41 UTC Sun Jun 28 2026
+*Jun 28 14:12:41.395: %SSH-5-SSH2_USERAUTH: User 'shopping.sudhanshu' authentication for SSH2 Session from 223.190.82.89 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:12:42.177: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 106.195.43.113 (tty = 2) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:12:42.178: %SSH-5-SSH2_CLOSE: SSH2 Session from 106.195.43.113 (tty = 2) for user '' using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:12:53.766: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:13:07.775: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:13:25.765: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:13:33.838: %SYS-6-LOGOUT: User shopping.sudhanshu has exited tty session 434(223.190.82.89)
+*Jun 28 14:13:33.839: %SSH-5-SSH2_CLOSE: SSH2 Session from 223.190.82.89 (tty = 0) for user 'shopping.sudhanshu' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:13:37.737: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 14:13:53.778: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:14:04.991: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:14:07.765: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:14:12.765: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:14:14.137: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:14:14.137: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:14:17.077: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:14:17.768: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:14:25.764: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:14:26.395: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:14:26.395: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:14:29.139: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:14:38.294: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:14:38.294: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:14:40.300: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:14:44.102: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 2) for user '' using crypto cipher '' closed
+*Jun 28 14:14:49.724: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:14:49.725: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:14:51.969: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:14:53.763: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:15:01.335: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:15:01.335: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:15:03.490: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:15:06.277: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:15:06.277: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:15:07.767: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:15:08.449: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:15:17.679: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:15:17.679: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:15:20.135: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:15:25.763: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:15:29.402: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:15:29.403: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:15:31.838: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:15:35.274: %SSH-5-SSH2_SESSION: SSH2 Session request from 43.245.57.249 (tty = 2) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:15:36.115: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: jaxnaipao] [Source: 43.245.57.249] [localport: 22] at 14:15:36 UTC Sun Jun 28 2026
+*Jun 28 14:15:36.115: %SSH-5-SSH2_USERAUTH: User 'jaxnaipao' authentication for SSH2 Session from 43.245.57.249 (tty = 2) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:15:41.121: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:15:41.121: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:15:43.148: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:15:50.585: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 3) for user '' using crypto cipher '' closed
+*Jun 28 14:15:52.368: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:15:52.368: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:15:52.647: %SSH-5-SSH2_SESSION: SSH2 Session request from 10.20.0.4 (tty = 0) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:15:52.799: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: cat8kaotest] [Source: 10.20.0.4] [localport: 22] at 14:15:52 UTC Sun Jun 28 2026
+*Jun 28 14:15:52.799: %SSH-5-SSH2_USERAUTH: User 'cat8kaotest' authentication for SSH2 Session from 10.20.0.4 (tty = 0) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:15:53.664: %SYS-6-LOGOUT: User cat8kaotest has exited tty session 434(10.20.0.4)
+*Jun 28 14:15:53.664: %SSH-5-SSH2_CLOSE: SSH2 Session from 10.20.0.4 (tty = 0) for user '' using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:15:53.761: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:15:54.634: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 3) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:15:57.612: %SYS-6-TTY_EXPIRE_TIMER: (exec timer expired, tty 435 (5.31.229.218)), user jaduziya
+*Jun 28 14:15:57.613: %SSH-5-SSH2_CLOSE: SSH2 Session from 5.31.229.218 (tty = 1) for user 'jaduziya' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:15:59.640: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 3) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:15:59.640: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 3) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:16:01.400: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:16:07.760: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:16:10.550: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:16:10.550: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:16:12.762: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:16:13.229: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:16:22.395: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:16:22.395: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:16:24.723: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:16:25.804: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:16:34.022: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:16:34.023: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:16:36.355: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:16:43.518: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:16:43.518: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:16:45.953: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:16:53.758: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:16:55.108: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:16:55.108: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:16:56.958: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 14:16:57.607: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:17:06.759: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:17:06.759: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:17:07.759: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:17:09.626: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:17:18.930: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:17:18.930: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:17:21.253: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:17:25.760: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:17:28.490: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:17:28.490: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:17:30.150: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:17:39.408: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:17:39.408: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:17:41.516: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:17:50.929: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:17:50.929: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:17:53.236: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:17:53.758: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:18:00.361: %SYS-6-LOGOUT: User jaxnaipao has exited tty session 436(43.245.57.249)
+*Jun 28 14:18:00.361: %SSH-5-SSH2_CLOSE: SSH2 Session from 43.245.57.249 (tty = 2) for user 'jaxnaipao' using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:18:02.480: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:18:02.480: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:18:03.320: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 14:18:04.288: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:18:07.775: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:18:11.592: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:18:11.592: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:18:13.601: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:18:13.757: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:18:22.763: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:18:22.763: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:18:24.400: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:18:26.005: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:18:33.538: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:18:33.538: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:18:35.525: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:18:44.774: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:18:44.774: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:18:46.894: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:18:53.756: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:18:56.159: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:18:56.159: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:18:58.079: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:19:03.169: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:19:03.169: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:19:04.852: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:19:07.755: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:19:09.684: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 14:19:12.756: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:19:14.107: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:19:14.107: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:19:16.997: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:19:25.756: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:19:26.159: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:19:26.159: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:19:28.540: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:19:37.991: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:19:37.991: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:19:40.940: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:19:50.097: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:19:50.097: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:19:52.898: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:19:53.753: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:19:58.020: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:19:58.020: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:20:00.517: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:20:07.754: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:20:09.791: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:20:09.791: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:20:11.823: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:20:13.753: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:20:16.049: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 14:20:21.001: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:20:21.001: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:20:22.870: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:20:25.753: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:20:32.135: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:20:32.135: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:20:34.158: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:20:41.447: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:20:41.447: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:20:42.778: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:20:52.021: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:20:52.021: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:20:53.741: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:20:53.756: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:21:02.916: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:21:02.916: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:21:04.939: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:21:07.752: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:21:12.755: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:21:14.090: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:21:14.090: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:21:16.577: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:21:21.237: %SSH-5-SSH2_SESSION: SSH2 Session request from 223.190.82.89 (tty = 1) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:21:21.956: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: shopping.sudhanshu] [Source: 223.190.82.89] [localport: 22] at 14:21:21 UTC Sun Jun 28 2026
+*Jun 28 14:21:21.956: %SSH-5-SSH2_USERAUTH: User 'shopping.sudhanshu' authentication for SSH2 Session from 223.190.82.89 (tty = 1) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:21:22.440: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 2) for user '' using crypto cipher '' closed
+*Jun 28 14:21:23.705: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:21:23.705: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:21:25.535: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:21:25.755: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:21:26.271: %SYS-6-LOGOUT: User shopping.sudhanshu has exited tty session 435(223.190.82.89)
+*Jun 28 14:21:26.271: %SSH-5-SSH2_CLOSE: SSH2 Session from 223.190.82.89 (tty = 1) for user '' using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:21:34.767: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:21:34.767: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:21:37.465: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:21:46.955: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:21:46.956: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:21:50.034: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:21:53.755: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:21:56.152: %SSH-5-SSH2_SESSION: SSH2 Session request from 10.20.0.4 (tty = 1) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:21:56.384: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: cat8kaotest] [Source: 10.20.0.4] [localport: 22] at 14:21:56 UTC Sun Jun 28 2026
+*Jun 28 14:21:56.385: %SSH-5-SSH2_USERAUTH: User 'cat8kaotest' authentication for SSH2 Session from 10.20.0.4 (tty = 1) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:21:57.253: %SYS-6-LOGOUT: User cat8kaotest has exited tty session 435(10.20.0.4)
+*Jun 28 14:21:57.253: %SSH-5-SSH2_CLOSE: SSH2 Session from 10.20.0.4 (tty = 1) for user '' using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:21:59.253: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:21:59.253: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:22:01.581: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:22:07.754: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:22:10.766: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:22:10.766: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:22:13.982: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:22:13.753: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:22:19.079: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:22:19.079: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:22:20.703: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:22:25.758: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:22:28.804: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 14:22:30.039: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:22:30.039: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:22:32.233: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:22:34.957: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:22:34.957: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:22:36.866: %SSH-5-SSH2_SESSION: SSH2 Session request from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:22:39.652: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 45.15.225.137 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:22:39.652: %SSH-5-SSH2_CLOSE: SSH2 Session from 45.15.225.137 (tty = 0) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:22:53.752: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:23:07.751: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:23:12.956: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:23:25.755: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:23:35.168: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 14:23:53.754: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:24:07.749: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:24:12.749: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:24:17.751: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:24:25.749: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:24:41.537: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 14:24:53.748: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:25:07.749: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:25:10.173: %SSH-5-SSH2_SESSION: SSH2 Session request from 5.31.229.218 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:25:12.750: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:25:17.733: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: jaduziya] [Source: 5.31.229.218] [localport: 22] at 14:25:17 UTC Sun Jun 28 2026
+*Jun 28 14:25:17.733: %SSH-5-SSH2_USERAUTH: User 'jaduziya' authentication for SSH2 Session from 5.31.229.218 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:25:25.961: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:25:47.900: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 14:25:53.748: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:26:07.747: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:26:13.746: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:26:18.624: %SSH-5-SSH2_SESSION: SSH2 Session request from 43.245.57.105 (tty = 1) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:26:19.470: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: jaxnaipao] [Source: 43.245.57.105] [localport: 22] at 14:26:19 UTC Sun Jun 28 2026
+*Jun 28 14:26:19.470: %SSH-5-SSH2_USERAUTH: User 'jaxnaipao' authentication for SSH2 Session from 43.245.57.105 (tty = 1) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:26:25.747: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:26:28.879: %SSH-5-SSH_CLOSE: SSH Session from 43.245.57.249 (tty = 2) for user '' using crypto cipher '' closed
+*Jun 28 14:26:53.748: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:26:54.267: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 2) for user '' using crypto cipher '' closed
+*Jun 28 14:27:07.745: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:27:12.746: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:27:25.744: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:27:53.745: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:27:54.919: %SSH-5-SSH2_SESSION: SSH2 Session request from 10.20.0.4 (tty = 2) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:27:55.151: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: cat8kaotest] [Source: 10.20.0.4] [localport: 22] at 14:27:55 UTC Sun Jun 28 2026
+*Jun 28 14:27:55.151: %SSH-5-SSH2_USERAUTH: User 'cat8kaotest' authentication for SSH2 Session from 10.20.0.4 (tty = 2) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:27:56.018: %SYS-6-LOGOUT: User cat8kaotest has exited tty session 436(10.20.0.4)
+*Jun 28 14:27:56.018: %SSH-5-SSH2_CLOSE: SSH2 Session from 10.20.0.4 (tty = 2) for user '' using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:28:00.640: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 2) for user '' using crypto cipher '' closed
+*Jun 28 14:28:07.745: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:28:13.746: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:28:25.746: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:28:53.748: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:29:07.004: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 2) for user '' using crypto cipher '' closed
+*Jun 28 14:29:07.743: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:29:12.745: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:29:25.745: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:29:44.509: %SYS-6-LOGOUT: User jaxnaipao has exited tty session 435(43.245.57.105)
+*Jun 28 14:29:44.509: %SSH-5-SSH2_CLOSE: SSH2 Session from 43.245.57.105 (tty = 1) for user '' using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:29:53.743: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:30:07.741: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:30:12.958: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:30:13.492: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 14:30:14.861: %SSH-5-SSH2_SESSION: SSH2 Session request from 223.190.82.89 (tty = 1) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:30:15.389: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: shopping.sudhanshu] [Source: 223.190.82.89] [localport: 22] at 14:30:15 UTC Sun Jun 28 2026
+*Jun 28 14:30:15.390: %SSH-5-SSH2_USERAUTH: User 'shopping.sudhanshu' authentication for SSH2 Session from 223.190.82.89 (tty = 1) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:30:19.092: %SYS-6-LOGOUT: User shopping.sudhanshu has exited tty session 435(223.190.82.89)
+*Jun 28 14:30:19.092: %SSH-5-SSH2_CLOSE: SSH2 Session from 223.190.82.89 (tty = 1) for user 'shopping.sudhanshu' using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:30:25.741: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:30:53.745: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:31:07.741: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:31:12.742: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:31:15.622: %SSH-5-SSH2_SESSION: SSH2 Session request from 103.77.215.69 (tty = 1) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:31:18.037: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 103.77.215.69 (tty = 1) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:31:18.037: %SSH-5-SSH2_CLOSE: SSH2 Session from 103.77.215.69 (tty = 1) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:31:19.871: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 14:31:25.738: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:31:43.497: %SSH-5-SSH2_SESSION: SSH2 Session request from 171.251.232.200 (tty = 1) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:31:44.445: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: ihoangchinh] [Source: 171.251.232.200] [localport: 22] at 14:31:44 UTC Sun Jun 28 2026
+*Jun 28 14:31:44.446: %SSH-5-SSH2_USERAUTH: User 'ihoangchinh' authentication for SSH2 Session from 171.251.232.200 (tty = 1) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:31:50.155: %SYS-6-LOGOUT: User ihoangchinh has exited tty session 435(171.251.232.200)
+*Jun 28 14:31:50.156: %SSH-5-SSH2_CLOSE: SSH2 Session from 171.251.232.200 (tty = 1) for user '' using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:31:53.741: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:32:07.743: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:32:13.739: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:32:25.737: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:32:26.266: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 14:32:53.737: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:33:07.737: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:33:25.739: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:33:32.636: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 14:33:53.738: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:33:56.941: %SSH-5-SSH2_SESSION: SSH2 Session request from 10.20.0.4 (tty = 1) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:33:57.171: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: cat8kaotest] [Source: 10.20.0.4] [localport: 22] at 14:33:57 UTC Sun Jun 28 2026
+*Jun 28 14:33:57.172: %SSH-5-SSH2_USERAUTH: User 'cat8kaotest' authentication for SSH2 Session from 10.20.0.4 (tty = 1) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:33:58.033: %SYS-6-LOGOUT: User cat8kaotest has exited tty session 435(10.20.0.4)
+*Jun 28 14:33:58.033: %SSH-5-SSH2_CLOSE: SSH2 Session from 10.20.0.4 (tty = 1) for user '' using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:34:07.735: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:34:12.737: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:34:25.733: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:34:39.003: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 14:34:53.736: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:35:07.734: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:35:25.734: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:35:45.371: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 14:35:53.735: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:36:07.731: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:36:12.731: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:36:25.732: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:36:51.764: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 14:36:53.732: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:36:59.834: %SYS-6-TTY_EXPIRE_TIMER: (exec timer expired, tty 434 (5.31.229.218)), user jaduziya
+*Jun 28 14:36:59.834: %SYS-6-LOGOUT: User jaduziya has exited tty session 434(5.31.229.218)
+*Jun 28 14:36:59.834: %SSH-5-SSH2_CLOSE: SSH2 Session from 5.31.229.218 (tty = 0) for user 'jaduziya' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:37:07.731: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:37:12.950: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:37:17.008: %SSH-5-SSH2_SESSION: SSH2 Session request from 5.31.229.218 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:37:25.730: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:37:26.042: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: jaduziya] [Source: 5.31.229.218] [localport: 22] at 14:37:26 UTC Sun Jun 28 2026
+*Jun 28 14:37:26.042: %SSH-5-SSH2_USERAUTH: User 'jaduziya' authentication for SSH2 Session from 5.31.229.218 (tty = 0) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:37:53.731: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:37:58.144: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 14:38:07.727: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:38:12.731: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:38:25.728: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:38:53.728: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:39:04.519: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 14:39:07.728: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:39:12.729: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:39:25.727: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:39:53.727: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:39:57.744: %SSH-5-SSH2_SESSION: SSH2 Session request from 10.20.0.4 (tty = 1) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:39:57.976: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: cat8kaotest] [Source: 10.20.0.4] [localport: 22] at 14:39:57 UTC Sun Jun 28 2026
+*Jun 28 14:39:57.976: %SSH-5-SSH2_USERAUTH: User 'cat8kaotest' authentication for SSH2 Session from 10.20.0.4 (tty = 1) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:39:58.856: %SYS-6-LOGOUT: User cat8kaotest has exited tty session 435(10.20.0.4)
+*Jun 28 14:39:58.856: %SSH-5-SSH2_CLOSE: SSH2 Session from 10.20.0.4 (tty = 1) for user '' using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:40:07.727: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:40:10.882: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 14:40:13.725: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:40:25.737: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:40:53.727: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:41:07.725: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:41:12.725: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:41:17.251: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 14:41:25.724: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:41:53.730: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:42:07.725: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:42:13.725: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:42:23.621: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 14:42:25.723: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:42:53.731: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:43:07.724: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:43:12.734: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:43:25.723: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:43:29.990: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 14:43:53.723: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:44:07.727: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:44:13.722: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:44:25.720: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:44:36.374: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 14:44:53.726: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:45:07.720: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:45:25.721: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:45:30.872: %SSH-5-SSH2_SESSION: SSH2 Session request from 223.190.82.89 (tty = 1) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:45:31.495: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: shopping.sudhanshu] [Source: 223.190.82.89] [localport: 22] at 14:45:31 UTC Sun Jun 28 2026
+*Jun 28 14:45:31.495: %SSH-5-SSH2_USERAUTH: User 'shopping.sudhanshu' authentication for SSH2 Session from 223.190.82.89 (tty = 1) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:45:35.864: %SYS-6-LOGOUT: User shopping.sudhanshu has exited tty session 435(223.190.82.89)
+*Jun 28 14:45:35.865: %SSH-5-SSH2_CLOSE: SSH2 Session from 223.190.82.89 (tty = 1) for user 'shopping.sudhanshu' using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:45:42.759: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 14:45:53.721: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:45:58.855: %SSH-5-SSH2_SESSION: SSH2 Session request from 10.20.0.4 (tty = 1) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:45:59.090: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: cat8kaotest] [Source: 10.20.0.4] [localport: 22] at 14:45:59 UTC Sun Jun 28 2026
+*Jun 28 14:45:59.090: %SSH-5-SSH2_USERAUTH: User 'cat8kaotest' authentication for SSH2 Session from 10.20.0.4 (tty = 1) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:45:59.956: %SYS-6-LOGOUT: User cat8kaotest has exited tty session 435(10.20.0.4)
+*Jun 28 14:45:59.956: %SSH-5-SSH2_CLOSE: SSH2 Session from 10.20.0.4 (tty = 1) for user '' using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:46:07.720: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:46:13.717: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:46:25.719: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:46:27.201: %DMI-5-AUTH_PASSED: R0/0: dmiauthd: User 'jaduziya' authenticated successfully from 5.31.229.218:39710  for netconf over ssh. External groups: PRIV15
+*Jun 28 14:46:30.079: %LINEPROTO-5-UPDOWN: Line protocol on Interface Loopback10, changed state to up
+*Jun 28 14:46:30.105: %SYS-5-CONFIG_P: Configured programmatically by process iosp_dmiauthd_conn_100001_vty_100001 from console as jaduziya on vty4294966926
+*Jun 28 14:46:30.093: %DMI-5-CONFIG_I: R0/0: dmiauthd: Configured from NETCONF/RESTCONF by jaduziya, transaction-id 12069
+*Jun 28 14:46:49.134: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 14:46:49.932: %SYS-5-CONFIG_I: Configured from console by jaduziya on vty0 (5.31.229.218)
+*Jun 28 14:46:53.719: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:47:07.721: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:47:25.718: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:47:53.718: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:47:55.504: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 14:48:07.718: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:48:13.716: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:48:25.718: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:48:53.716: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:49:01.882: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 14:49:07.716: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:49:14.714: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:49:25.712: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:49:53.716: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:50:07.712: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:50:08.254: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 14:50:13.713: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:50:25.711: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:50:53.713: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:51:07.712: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:51:12.296: %SSH-5-SSH2_SESSION: SSH2 Session request from 103.77.215.69 (tty = 1) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:51:14.625: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 2) for user '' using crypto cipher '' closed
+*Jun 28 14:51:15.020: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 103.77.215.69 (tty = 1) using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:51:15.020: %SSH-5-SSH2_CLOSE: SSH2 Session from 103.77.215.69 (tty = 1) for user '' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:51:25.710: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:51:53.929: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:52:03.952: %SSH-5-SSH2_SESSION: SSH2 Session request from 10.20.0.4 (tty = 1) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:52:04.185: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: cat8kaotest] [Source: 10.20.0.4] [localport: 22] at 14:52:04 UTC Sun Jun 28 2026
+*Jun 28 14:52:04.185: %SSH-5-SSH2_USERAUTH: User 'cat8kaotest' authentication for SSH2 Session from 10.20.0.4 (tty = 1) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:52:05.054: %SYS-6-LOGOUT: User cat8kaotest has exited tty session 435(10.20.0.4)
+*Jun 28 14:52:05.054: %SSH-5-SSH2_CLOSE: SSH2 Session from 10.20.0.4 (tty = 1) for user '' using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:52:07.709: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:52:13.711: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:52:21.001: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 14:52:24.555: %SSH-5-SSH2_SESSION: SSH2 Session request from 223.190.82.89 (tty = 1) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:52:25.340: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: shopping.sudhanshu] [Source: 223.190.82.89] [localport: 22] at 14:52:25 UTC Sun Jun 28 2026
+*Jun 28 14:52:25.340: %SSH-5-SSH2_USERAUTH: User 'shopping.sudhanshu' authentication for SSH2 Session from 223.190.82.89 (tty = 1) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:52:25.712: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:52:32.733: %SYS-6-LOGOUT: User shopping.sudhanshu has exited tty session 435(223.190.82.89)
+*Jun 28 14:52:32.733: %SSH-5-SSH2_CLOSE: SSH2 Session from 223.190.82.89 (tty = 1) for user 'shopping.sudhanshu' using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:52:53.709: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:53:07.708: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:53:12.709: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:53:25.709: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:53:27.383: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 14:53:53.710: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:54:07.710: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:54:13.706: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:54:25.707: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:54:33.748: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 14:54:53.706: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:55:07.704: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:55:12.708: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:55:25.705: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:55:40.117: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 14:55:41.945: %SSH-5-SSH2_SESSION: SSH2 Session request from 18.97.5.64 (tty = 1) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:55:42.339: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 18.97.5.64 (tty = 1) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 14:55:42.339: %SSH-5-SSH2_CLOSE: SSH2 Session from 18.97.5.64 (tty = 1) for user '' using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:55:53.706: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:56:07.704: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:56:12.704: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:56:25.699: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:56:46.485: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 14:56:53.704: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:57:07.702: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:57:12.703: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:57:25.702: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:57:52.855: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 14:57:53.702: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:58:00.912: %SSH-5-SSH2_SESSION: SSH2 Session request from 10.20.0.4 (tty = 1) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:58:01.149: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: cat8kaotest] [Source: 10.20.0.4] [localport: 22] at 14:58:01 UTC Sun Jun 28 2026
+*Jun 28 14:58:01.149: %SSH-5-SSH2_USERAUTH: User 'cat8kaotest' authentication for SSH2 Session from 10.20.0.4 (tty = 1) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:58:02.063: %SYS-6-LOGOUT: User cat8kaotest has exited tty session 435(10.20.0.4)
+*Jun 28 14:58:02.063: %SSH-5-SSH2_CLOSE: SSH2 Session from 10.20.0.4 (tty = 1) for user '' using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 14:58:07.701: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:58:12.702: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:58:25.703: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:58:53.905: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:58:59.248: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 14:59:07.700: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:59:12.703: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:59:20.652: %SSH-5-SSH2_SESSION: SSH2 Session request from 43.245.57.105 (tty = 1) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:59:21.484: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: jaxnaipao] [Source: 43.245.57.105] [localport: 22] at 14:59:21 UTC Sun Jun 28 2026
+*Jun 28 14:59:21.484: %SSH-5-SSH2_USERAUTH: User 'jaxnaipao' authentication for SSH2 Session from 43.245.57.105 (tty = 1) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 14:59:25.700: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 14:59:53.701: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:00:05.619: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 2) for user '' using crypto cipher '' closed
+*Jun 28 15:00:07.699: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:00:13.697: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:00:25.700: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:00:53.697: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:01:07.938: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:01:12.138: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 2) for user '' using crypto cipher '' closed
+*Jun 28 15:01:25.698: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:01:53.701: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:02:07.695: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:02:12.697: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:02:18.510: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 2) for user '' using crypto cipher '' closed
+*Jun 28 15:02:25.695: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:02:53.700: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:03:07.695: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:03:24.972: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 2) for user '' using crypto cipher '' closed
+*Jun 28 15:03:25.917: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:03:53.694: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:04:03.098: %SSH-5-SSH2_SESSION: SSH2 Session request from 10.20.0.4 (tty = 2) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 15:04:03.332: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: cat8kaotest] [Source: 10.20.0.4] [localport: 22] at 15:04:03 UTC Sun Jun 28 2026
+*Jun 28 15:04:03.332: %SSH-5-SSH2_USERAUTH: User 'cat8kaotest' authentication for SSH2 Session from 10.20.0.4 (tty = 2) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 15:04:04.224: %SYS-6-LOGOUT: User cat8kaotest has exited tty session 436(10.20.0.4)
+*Jun 28 15:04:04.225: %SSH-5-SSH2_CLOSE: SSH2 Session from 10.20.0.4 (tty = 2) for user '' using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 15:04:07.694: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:04:12.694: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:04:17.694: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:04:25.692: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:04:31.341: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 2) for user '' using crypto cipher '' closed
+*Jun 28 15:04:53.696: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:05:07.692: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:05:25.691: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:05:37.137: %SYS-6-TTY_EXPIRE_TIMER: (exec timer expired, tty 434 (5.31.229.218)), user jaduziya
+*Jun 28 15:05:37.137: %SYS-6-LOGOUT: User jaduziya has exited tty session 434(5.31.229.218)
+*Jun 28 15:05:37.137: %SSH-5-SSH2_CLOSE: SSH2 Session from 5.31.229.218 (tty = 0) for user 'jaduziya' using crypto cipher 'chacha20-poly1305@openssh.com', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 15:05:37.709: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 15:05:53.906: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:06:07.689: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:06:12.691: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:06:25.689: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:06:44.092: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 15:06:53.691: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:07:07.688: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:07:25.688: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:07:50.584: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 15:07:53.687: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:08:07.689: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:08:13.686: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:08:25.689: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:08:53.691: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:08:56.965: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 15:09:07.684: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:09:14.684: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:09:25.685: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:09:53.684: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:10:03.092: %SSH-5-SSH2_SESSION: SSH2 Session request from 10.20.0.4 (tty = 0) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 15:10:03.323: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: cat8kaotest] [Source: 10.20.0.4] [localport: 22] at 15:10:03 UTC Sun Jun 28 2026
+*Jun 28 15:10:03.323: %SSH-5-SSH2_USERAUTH: User 'cat8kaotest' authentication for SSH2 Session from 10.20.0.4 (tty = 0) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 15:10:03.332: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 2) for user '' using crypto cipher '' closed
+*Jun 28 15:10:04.188: %SYS-6-LOGOUT: User cat8kaotest has exited tty session 434(10.20.0.4)
+*Jun 28 15:10:04.188: %SSH-5-SSH2_CLOSE: SSH2 Session from 10.20.0.4 (tty = 0) for user '' using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 15:10:07.687: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:10:13.887: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:10:25.684: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:10:53.691: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:11:07.682: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:11:09.706: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 15:11:25.683: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:11:30.094: %SYS-6-LOGOUT: User jaxnaipao has exited tty session 435(43.245.57.105)
+*Jun 28 15:11:30.094: %SSH-5-SSH2_CLOSE: SSH2 Session from 43.245.57.105 (tty = 1) for user '' using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 15:11:53.683: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:12:07.680: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:12:12.682: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:12:16.094: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 15:12:25.679: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:12:33.469: %SSH-5-SSH2_SESSION: SSH2 Session request from 108.129.87.165 (tty = 0) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 15:12:36.227: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 108.129.87.165 (tty = 0) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Failed
+*Jun 28 15:12:36.227: %SSH-5-SSH2_CLOSE: SSH2 Session from 108.129.87.165 (tty = 0) for user '' using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 15:12:53.680: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:13:07.679: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:13:12.687: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:13:22.477: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 15:13:25.688: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:13:53.679: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:14:07.680: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:14:12.682: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:14:25.679: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:14:28.843: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 15:14:53.678: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:15:07.894: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:15:18.452: %SSH-5-SSH_CLOSE: SSH Session from 34.68.34.68 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 15:15:18.548: %SSH-5-SSH_CLOSE: SSH Session from 34.68.34.68 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 15:15:25.676: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:15:35.207: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 15:15:37.527: %SSH-5-SSH_CLOSE: SSH Session from 34.68.34.68 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 15:15:37.643: %SSH-5-SSH_CLOSE: SSH Session from 34.68.34.68 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 15:15:53.682: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:16:04.760: %SSH-5-SSH2_SESSION: SSH2 Session request from 10.20.0.4 (tty = 0) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 15:16:04.993: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: cat8kaotest] [Source: 10.20.0.4] [localport: 22] at 15:16:04 UTC Sun Jun 28 2026
+*Jun 28 15:16:04.993: %SSH-5-SSH2_USERAUTH: User 'cat8kaotest' authentication for SSH2 Session from 10.20.0.4 (tty = 0) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 15:16:05.870: %SYS-6-LOGOUT: User cat8kaotest has exited tty session 434(10.20.0.4)
+*Jun 28 15:16:05.870: %SSH-5-SSH2_CLOSE: SSH2 Session from 10.20.0.4 (tty = 0) for user '' using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 15:16:07.682: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:16:13.675: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:16:25.676: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:16:41.581: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 15:16:53.678: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:17:07.674: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:17:12.676: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:17:25.881: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:17:47.954: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 15:17:53.680: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:18:07.673: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:18:13.677: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:18:25.673: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:18:53.682: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:18:54.467: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 15:19:07.671: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:19:12.672: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:19:25.671: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:19:30.462: %SSH-5-SSH2_SESSION: SSH2 Session request from 41.137.166.70 (tty = 0) using crypto cipher 'aes256-ctr', hmac 'hmac-sha2-512-etm@openssh.com' Succeeded
+*Jun 28 15:19:42.030: %SSH-5-SSH2_USERAUTH: User '' authentication for SSH2 Session from 41.137.166.70 (tty = 0) using crypto cipher 'aes256-ctr', hmac 'hmac-sha2-512-etm@openssh.com' Failed
+*Jun 28 15:19:42.030: %SSH-5-SSH2_CLOSE: SSH2 Session from 41.137.166.70 (tty = 0) for user '' using crypto cipher 'aes256-ctr', hmac 'hmac-sha2-512-etm@openssh.com' closed
+*Jun 28 15:19:53.682: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:20:00.835: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 15:20:07.670: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:20:12.671: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:20:25.669: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:20:53.679: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:21:07.205: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 15:21:07.668: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:21:12.671: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:21:25.671: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:21:53.681: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:22:04.908: %SSH-5-SSH2_SESSION: SSH2 Session request from 10.20.0.4 (tty = 0) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 15:22:05.140: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: cat8kaotest] [Source: 10.20.0.4] [localport: 22] at 15:22:05 UTC Sun Jun 28 2026
+*Jun 28 15:22:05.140: %SSH-5-SSH2_USERAUTH: User 'cat8kaotest' authentication for SSH2 Session from 10.20.0.4 (tty = 0) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 15:22:06.038: %SYS-6-LOGOUT: User cat8kaotest has exited tty session 434(10.20.0.4)
+*Jun 28 15:22:06.038: %SSH-5-SSH2_CLOSE: SSH2 Session from 10.20.0.4 (tty = 0) for user '' using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 15:22:07.667: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:22:12.910: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:22:13.580: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 15:22:25.667: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:22:53.678: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:23:07.664: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:23:12.665: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:23:19.950: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 15:23:25.664: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:23:53.686: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:24:07.662: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:24:12.663: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:24:25.664: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:24:26.315: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 15:24:53.670: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:25:07.662: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:25:25.661: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:25:32.678: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 0) for user '' using crypto cipher '' closed
+*Jun 28 15:25:53.676: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:26:07.660: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:26:12.663: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:26:23.492: %SSH-5-SSH2_SESSION: SSH2 Session request from 43.245.57.249 (tty = 0) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 15:26:24.324: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: jaxnaipao] [Source: 43.245.57.249] [localport: 22] at 15:26:24 UTC Sun Jun 28 2026
+*Jun 28 15:26:24.325: %SSH-5-SSH2_USERAUTH: User 'jaxnaipao' authentication for SSH2 Session from 43.245.57.249 (tty = 0) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 15:26:25.662: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:26:39.050: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 15:26:53.664: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:27:07.658: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:27:12.662: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:27:25.659: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:27:45.418: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 15:27:53.658: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:28:04.291: %SSH-5-SSH2_SESSION: SSH2 Session request from 10.20.0.4 (tty = 1) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 15:28:04.526: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: cat8kaotest] [Source: 10.20.0.4] [localport: 22] at 15:28:04 UTC Sun Jun 28 2026
+*Jun 28 15:28:04.526: %SSH-5-SSH2_USERAUTH: User 'cat8kaotest' authentication for SSH2 Session from 10.20.0.4 (tty = 1) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Jun 28 15:28:05.383: %SYS-6-LOGOUT: User cat8kaotest has exited tty session 435(10.20.0.4)
+*Jun 28 15:28:05.383: %SSH-5-SSH2_CLOSE: SSH2 Session from 10.20.0.4 (tty = 1) for user '' using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' closed
+*Jun 28 15:28:07.659: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:28:13.659: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:28:25.656: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:28:51.787: %SSH-5-SSH_CLOSE: SSH Session from 92.5.48.191 (tty = 1) for user '' using crypto cipher '' closed
+*Jun 28 15:28:53.662: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+*Jun 28 15:29:07.655: %DMI-5-AUTHENTICATION_FAILED: R0/0: dmiauthd: Authentication failure from 172.173.231.80:0 for rest over http.
+==================================================
+[01:31:48] show ntp status
+%NTP is not enabled.
+==================================================
+[01:31:48] show inventory
+NAME: "Chassis", DESCR: "Cisco Catalyst 8000V Edge Chassis"
+PID: C8000V            , VID: V00  , SN: 9LRAVIYVMYK
+
+NAME: "module R0", DESCR: "Cisco Catalyst 8000V Edge Route Processor"
+PID: C8000V            , VID: V00  , SN: JAB1303001C
+
+NAME: "module F0", DESCR: "Cisco Catalyst 8000V Edge Embedded Services Processor"
+PID: C8000V            , VID:      , SN:            
+
+
+==================================================
+[01:31:49] show environment
+                  ^
+% Invalid input detected at '^' marker.
+
+==================================================
+[01:31:50] show ip route
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is 10.10.20.254 to network 0.0.0.0
+
+S*    0.0.0.0/0 [1/0] via 10.10.20.254
+      10.0.0.0/8 is variably subnetted, 3 subnets, 2 masks
+C        10.10.10.10/32 is directly connected, Loopback10
+C        10.10.20.0/24 is directly connected, GigabitEthernet1
+L        10.10.20.148/32 is directly connected, GigabitEthernet1
+      192.168.0.0/32 is subnetted, 1 subnets
+C        192.168.0.5 is directly connected, Loopback100
+      192.168.10.0/24 is variably subnetted, 2 subnets, 2 masks
+C        192.168.10.0/24 is directly connected, GigabitEthernet3
+L        192.168.10.1/32 is directly connected, GigabitEthernet3
+==================================================
+[01:31:50] show interfaces
+GigabitEthernet1 is up, line protocol is up 
+  Hardware is vNIC, address is 0050.56bf.34d7 (bia 0050.56bf.34d7)
+  Internet address is 10.10.20.148/24
+  MTU 1500 bytes, BW 1000000 Kbit/sec, DLY 10 usec, 
+     reliability 255/255, txload 1/255, rxload 1/255
+  Encapsulation ARPA, loopback not set
+  Keepalive set (10 sec)
+  Full Duplex, 1000Mbps, link type is auto, media type is Virtual
+  output flow-control is unsupported, input flow-control is unsupported
+  ARP type: ARPA, ARP Timeout 04:00:00
+  Last input 00:00:00, output 00:00:00, output hang never
+  Last clearing of "show interface" counters never
+  Input queue: 0/375/0/0 (size/max/drops/flushes); Total output drops: 0
+  Queueing strategy: fifo
+  Output queue: 0/40 (size/max)
+  5 minute input rate 9000 bits/sec, 12 packets/sec
+  5 minute output rate 23000 bits/sec, 15 packets/sec
+     247351 packets input, 27377071 bytes, 0 no buffer
+     Received 0 broadcasts (0 IP multicasts)
+     0 runts, 0 giants, 0 throttles 
+     0 input errors, 0 CRC, 0 frame, 0 overrun, 0 ignored
+     0 watchdog, 0 multicast, 0 pause input
+     409077 packets output, 78481888 bytes, 0 underruns
+     Output 0 broadcasts (0 IP multicasts)
+     0 output errors, 0 collisions, 0 interface resets
+     0 unknown protocol drops
+     0 babbles, 0 late collision, 0 deferred
+     0 lost carrier, 0 no carrier, 0 pause output
+     0 output buffer failures, 0 output buffers swapped out
+GigabitEthernet2 is up, line protocol is up 
+  Hardware is vNIC, address is 0050.56bf.ba51 (bia 0050.56bf.ba51)
+  Description: DevNet was here
+  MTU 1500 bytes, BW 1000000 Kbit/sec, DLY 10 usec, 
+     reliability 255/255, txload 1/255, rxload 1/255
+  Encapsulation ARPA, loopback not set
+  Keepalive set (10 sec)
+  Full Duplex, 1000Mbps, link type is auto, media type is Virtual
+  output flow-control is unsupported, input flow-control is unsupported
+  ARP type: ARPA, ARP Timeout 04:00:00
+  Last input 09:07:35, output never, output hang never
+  Last clearing of "show interface" counters never
+  Input queue: 0/375/0/0 (size/max/drops/flushes); Total output drops: 0
+  Queueing strategy: fifo
+  Output queue: 0/40 (size/max)
+  5 minute input rate 0 bits/sec, 0 packets/sec
+  5 minute output rate 0 bits/sec, 0 packets/sec
+     51 packets input, 3240 bytes, 0 no buffer
+     Received 0 broadcasts (0 IP multicasts)
+     0 runts, 0 giants, 0 throttles 
+     0 input errors, 0 CRC, 0 frame, 0 overrun, 0 ignored
+     0 watchdog, 0 multicast, 0 pause input
+     0 packets output, 0 bytes, 0 underruns
+     Output 0 broadcasts (0 IP multicasts)
+     0 output errors, 0 collisions, 2 interface resets
+     0 unknown protocol drops
+     0 babbles, 0 late collision, 0 deferred
+     0 lost carrier, 0 no carrier, 0 pause output
+     0 output buffer failures, 0 output buffers swapped out
+GigabitEthernet3 is up, line protocol is up 
+  Hardware is vNIC, address is 0050.56bf.42f3 (bia 0050.56bf.42f3)
+  Internet address is 192.168.10.1/24
+  MTU 1500 bytes, BW 1000000 Kbit/sec, DLY 10 usec, 
+     reliability 255/255, txload 1/255, rxload 1/255
+  Encapsulation ARPA, loopback not set
+  Keepalive set (10 sec)
+  Full Duplex, 1000Mbps, link type is auto, media type is Virtual
+  output flow-control is unsupported, input flow-control is unsupported
+  ARP type: ARPA, ARP Timeout 04:00:00
+  Last input 01:48:10, output 01:48:10, output hang never
+  Last clearing of "show interface" counters never
+  Input queue: 0/375/0/0 (size/max/drops/flushes); Total output drops: 0
+  Queueing strategy: fifo
+  Output queue: 0/40 (size/max)
+  5 minute input rate 0 bits/sec, 0 packets/sec
+  5 minute output rate 0 bits/sec, 0 packets/sec
+     14 packets input, 930 bytes, 0 no buffer
+     Received 0 broadcasts (0 IP multicasts)
+     0 runts, 0 giants, 0 throttles 
+     0 input errors, 0 CRC, 0 frame, 0 overrun, 0 ignored
+     0 watchdog, 0 multicast, 0 pause input
+     2 packets output, 120 bytes, 0 underruns
+     Output 0 broadcasts (0 IP multicasts)
+     0 output errors, 0 collisions, 2 interface resets
+     0 unknown protocol drops
+     0 babbles, 0 late collision, 0 deferred
+     0 lost carrier, 0 no carrier, 0 pause output
+     0 output buffer failures, 0 output buffers swapped out
+Loopback10 is up, line protocol is up 
+  Hardware is Loopback
+  Description: NETCONF Lab
+  Internet address is 10.10.10.10/32
+  MTU 1514 bytes, BW 8000000 Kbit/sec, DLY 5000 usec, 
+     reliability 255/255, txload 1/255, rxload 1/255
+  Encapsulation LOOPBACK, loopback not set
+  Keepalive set (10 sec)
+  Last input never, output never, output hang never
+  Last clearing of "show interface" counters never
+  Input queue: 0/75/0/0 (size/max/drops/flushes); Total output drops: 0
+  Queueing strategy: fifo
+  Output queue: 0/0 (size/max)
+  5 minute input rate 0 bits/sec, 0 packets/sec
+  5 minute output rate 0 bits/sec, 0 packets/sec
+     0 packets input, 0 bytes, 0 no buffer
+     Received 0 broadcasts (0 IP multicasts)
+     0 runts, 0 giants, 0 throttles 
+     0 input errors, 0 CRC, 0 frame, 0 overrun, 0 ignored, 0 abort
+     0 packets output, 0 bytes, 0 underruns
+     Output 0 broadcasts (0 IP multicasts)
+     0 output errors, 0 collisions, 0 interface resets
+     0 unknown protocol drops
+     0 output buffer failures, 0 output buffers swapped out
+Loopback100 is up, line protocol is up 
+  Hardware is Loopback
+  Description: RESTCONF Lab
+  Internet address is 192.168.0.5/32
+  MTU 1514 bytes, BW 8000000 Kbit/sec, DLY 5000 usec, 
+     reliability 255/255, txload 1/255, rxload 1/255
+  Encapsulation LOOPBACK, loopback not set
+  Keepalive set (10 sec)
+  Last input 01:48:35, output 01:48:35, output hang never
+  Last clearing of "show interface" counters never
+  Input queue: 0/75/0/0 (size/max/drops/flushes); Total output drops: 0
+  Queueing strategy: fifo
+  Output queue: 0/0 (size/max)
+  5 minute input rate 0 bits/sec, 0 packets/sec
+  5 minute output rate 0 bits/sec, 0 packets/sec
+     0 packets input, 0 bytes, 0 no buffer
+     Received 0 broadcasts (0 IP multicasts)
+     0 runts, 0 giants, 0 throttles 
+     0 input errors, 0 CRC, 0 frame, 0 overrun, 0 ignored, 0 abort
+     0 packets output, 0 bytes, 0 underruns
+     Output 0 broadcasts (0 IP multicasts)
+     0 output errors, 0 collisions, 0 interface resets
+     0 unknown protocol drops
+     0 output buffer failures, 0 output buffers swapped out
+==================================================
+[01:31:51] show protocols
+Global values:
+  Internet Protocol routing is enabled
+GigabitEthernet1 is up, line protocol is up
+  Internet address is 10.10.20.148/24
+GigabitEthernet2 is up, line protocol is up
+GigabitEthernet3 is up, line protocol is up
+  Internet address is 192.168.10.1/24
+Loopback10 is up, line protocol is up
+  Internet address is 10.10.10.10/32
+Loopback100 is up, line protocol is up
+  Internet address is 192.168.0.5/32
+==================================================
+[01:31:52] show ip ospf neighbor
+
+==================================================
+[01:31:53] show ip eigrp neighbors
+
+==================================================
+[01:31:53] show bgp summary
+% Command accepted but obsolete, unreleased or unsupported; see documentation.
+% BGP not active
+
+==================================================
+[01:31:54] show ip route static
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is 10.10.20.254 to network 0.0.0.0
+
+S*    0.0.0.0/0 [1/0] via 10.10.20.254
+==================================================
+[01:31:55] show ip nat translations
+
+==================================================
+[01:31:56] show ip dns view
+DNS View default parameters:
+DNS Resolver settings:
+  Domain lookup is disabled
+  Default domain name: lab.devnetsandbox.local
+  Domain search list:
+  Domain name-servers:
+    255.255.255.255
+DNS Server settings:
+  Forwarding of queries is enabled
+  Forwarder addresses:
+
+
+==================================================
+[01:31:57] show interfaces status
+
+==================================================
+[01:31:57] show vlan brief
+
+VLAN Name                             Status    Ports
+---- -------------------------------- --------- -------------------------------
+1    default                          active    
+1002 fddi-default                     act/unsup 
+1003 token-ring-default               act/unsup 
+1004 fddinet-default                  act/unsup 
+1005 trnet-default                    act/unsup 
+==================================================
+[01:32:02] show spanning-tree
+
+No spanning tree instance exists.
+
+==================================================
+[01:32:03] show mac address-table
+          Mac Address Table
+-------------------------------------------
+
+Vlan    Mac Address       Type        Ports
+----    -----------       --------    -----
+ All    0100.0ccc.cccc    STATIC      CPU
+ All    0100.0ccc.cccd    STATIC      CPU
+ All    0100.0ccc.ccce    STATIC      CPU
+ All    0180.c200.0000    STATIC      CPU
+ All    0180.c200.0001    STATIC      CPU
+ All    0180.c200.0002    STATIC      CPU
+ All    0180.c200.0003    STATIC      CPU
+ All    0180.c200.0004    STATIC      CPU
+ All    0180.c200.0005    STATIC      CPU
+ All    0180.c200.0006    STATIC      CPU
+ All    0180.c200.0007    STATIC      CPU
+ All    0180.c200.0008    STATIC      CPU
+ All    0180.c200.0009    STATIC      CPU
+ All    0180.c200.000a    STATIC      CPU
+ All    0180.c200.000b    STATIC      CPU
+ All    0180.c200.000c    STATIC      CPU
+ All    0180.c200.000d    STATIC      CPU
+ All    0180.c200.000e    STATIC      CPU
+ All    0180.c200.000f    STATIC      CPU
+ All    0180.c200.0010    STATIC      CPU
+Total Mac Addresses for this criterion: 20
+==================================================
+[01:32:04] show etherchannel summary
+Flags:  D - down        P/bndl - bundled in port-channel
+        I - stand-alone s/susp - suspended
+        H - Hot-standby (LACP only)
+        R - Layer3      S - Layer2
+        U - in use      f - failed to allocate aggregator
+
+        M - not in use, minimum links not met
+        u - unsuitable for bundling
+        w - waiting to be aggregated
+        d - default port
+
+
+Number of channel-groups in use: 0
+Number of aggregators:           0
+
+Group  Port-channel  Protocol    Ports
+------+-------------+-----------+-----------------------------------------------
+
+RU - L3 port-channel UP State
+SU - L2 port-channel UP state
+P/bndl -  Bundled
+S/susp  - Suspended
+
+==================================================
+[01:32:05] show interfaces trunk
+
+==================================================
+[01:32:06] show port-security
+Secure Port  MaxSecureAddr  CurrentAddr  SecurityViolation  Security Action
+                (Count)       (Count)          (Count)
+---------------------------------------------------------------------------
+---------------------------------------------------------------------------
+Total Addresses in System (excluding one mac per port)     : 0
+Max Addresses limit in System (excluding one mac per port) : 2048
+==================================================
+[01:32:07] show interfaces counters errors
+
+==================================================
