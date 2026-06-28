@@ -398,10 +398,7 @@ The project has grown from a simple automation script into a feature-rich deskto
 
 Planned future features include:
 
-* Live Network Dashboard
-* SNMP Monitoring
 * SSH Terminal
-* Device Discovery
 * Network Topology Mapping
 * REST API Integration
 * Configuration Comparison
@@ -409,7 +406,6 @@ Planned future features include:
 * Inventory Management
 * Real-Time Alerts
 * Performance Analytics
-* Dark & Light Themes
 * Plugin Support
 * Multi-user Authentication
 * Cloud Integration
