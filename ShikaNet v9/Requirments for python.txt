@@ -1,0 +1,8 @@
+netmiko
+paramiko
+ttkbootstrap
+tk
+requests
+pyserial
+psutil
+colorama
