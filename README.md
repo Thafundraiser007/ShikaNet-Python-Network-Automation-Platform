@@ -300,6 +300,49 @@ Run the application:
 ```bash
 python ShikaNet.py
 ```
+# 📁 Project Structure
+
+The current repository is organized around the ShikaNet v9 application and its supporting documentation and resources.
+
+```text
+ShikaNet-Python-Network-Automation-Platform/
+│
+├── README.md
+│
+└── ShikaNet v9/
+    │
+    ├── ShikaNet V9.py
+    │
+    ├── Requirments for python.txt
+    │
+    ├── Reports received via Email option in ShikaNet/
+    │
+    └── screenshots/
+```
+
+### 📄 Main Application
+
+**`ShikaNet v9/ShikaNet V9.py`**
+
+The primary Python application containing the ShikaNet v9 desktop network automation platform.
+
+### 📦 Requirements
+
+**`ShikaNet v9/Requirments for python.txt`**
+
+Contains the Python packages required to run the application from source.
+
+### 📧 Email Reports
+
+**`ShikaNet v9/Reports received via Email option in ShikaNet/`**
+
+Contains supporting material demonstrating the email reporting functionality within ShikaNet.
+
+### 📸 Screenshots
+
+**`ShikaNet v9/screenshots/`**
+
+Contains screenshots and visual documentation of the application interface and functionality.
 
 ---
 
