@@ -43,20 +43,56 @@ _KEY_SEED       = b"NetworkToolV8_Key_DoNotShare_2025"
 
 THEMES = ["darkly","cyborg","superhero","solar","vapor","flatly","litera","journal"]
 
-TERM_BG   = "#0d0d17"
-TERM_TEXT = "#cdd6f4"
-TERM_PUR  = "#cba6f7"
-TERM_GRN  = "#a6e3a1"
-TERM_BLU  = "#89b4fa"
-TERM_RED  = "#f38ba8"
-TERM_YLW  = "#f9e2af"
-TERM_GRY  = "#45475a"
-TERM_CYN  = "#89dceb"
+# ── Dashboard-reference palette ────────────────────────────────────────────
+# Deep navy base with card/sidebar tiers one step lighter each, teal/purple/
+# pink/gold accents — tuned to match the reference dashboard screenshot while
+# staying close enough to the app's original Catppuccin-style values that
+# every existing bootstyle="..." widget keeps working unchanged.
+TERM_BG    = "#0c0e14"   # app background
+SIDEBAR_BG = "#11141b"   # left-nav / profile panel
+CARD_BG    = "#161a23"   # stat cards, list rows, panels
+CARD_BRDR  = "#232838"   # subtle 1px card border
+TERM_TEXT  = "#cdd6f4"
+TERM_PUR   = "#c9a6f7"
+TERM_GRN   = "#8fe3b0"
+TERM_BLU   = "#89b4fa"
+TERM_RED   = "#f38ba8"
+TERM_YLW   = "#f2c46d"
+TERM_GRY   = "#5c6178"
+TERM_CYN   = "#7ee8d0"
 
 DEVICE_TYPES = [
     "cisco_ios","cisco_xe","cisco_nxos","cisco_xr",
     "juniper_junos","arista_eos","hp_comware","huawei","linux",
 ]
+
+# Recognized topology/3D-view device roles. "auto" (the default) means
+# ShikaNet will guess from the device name via infer_device_role() below —
+# it never fabricates a role for a device the user hasn't described.
+DEVICE_ROLES = ["auto","router","switch","firewall","server","access_point","other"]
+
+def infer_device_role(name, d=None):
+    """Best-effort device role for topology/3D icons, using only real data:
+    an explicit 'role' set on the device (Add/Edit Device dialog) always
+    wins; otherwise a hostname-keyword guess; otherwise 'generic' — never a
+    specific guess ShikaNet can't actually support. Used by the Topology 2D
+    canvas legend and the 3D topology data adapter."""
+    d = d or {}
+    role = (d.get("role") or "auto").strip().lower()
+    if role and role != "auto":
+        return role
+    n = (name or "").lower()
+    if any(k in n for k in ("fw","firewall","asa","palo","fortigate","fortinet")):
+        return "firewall"
+    if any(k in n for k in ("sw","switch","nxos")):
+        return "switch"
+    if any(k in n for k in ("rtr","router","edge","core","wan","gw","gateway")):
+        return "router"
+    if any(k in n for k in ("srv","server","host")):
+        return "server"
+    if any(k in n for k in ("ap-","wap","accesspoint","wlc")):
+        return "access_point"
+    return "generic"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # SHOW COMMANDS
@@ -104,6 +140,366 @@ INVENTORY_CMDS = [
     "show vlan brief","show interfaces status","show cdp neighbors detail",
     "show arp","show mac address-table",
 ]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 3D TOPOLOGY — self-contained local HTML/JS template
+#
+# Rendering technology: three.js (WebGL), loaded from a LOCAL vendored file
+# (assets/topology3d/three.min.js) — never from a CDN, so the viewer works
+# fully offline and doesn't reach out to the network. Orbit/zoom/pan is a
+# small hand-written controller (mouse drag + wheel) so no additional
+# three.js "addons" file is required beyond the single core library.
+#
+# __TOPOLOGY_DATA__ is replaced at runtime with a JSON snapshot built by
+# App._topo_snapshot() from the real self._topo_nodes / self.devices data —
+# this template never contains any device data itself.
+# ─────────────────────────────────────────────────────────────────────────────
+_TOPO3D_HTML_TEMPLATE = r"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>ShikaNet — 3D Topology</title>
+<style>
+  html,body { margin:0; padding:0; overflow:hidden; background:#0c0e14;
+              font-family: 'Courier New', monospace; color:#cdd6f4; }
+  #canvas-wrap { position:absolute; inset:0; }
+  #hud { position:absolute; top:10px; left:10px; z-index:10;
+         background:rgba(17,20,27,0.85); border:1px solid #232838;
+         border-radius:6px; padding:10px 12px; font-size:12px; max-width:300px; }
+  #hud h1 { font-size:13px; margin:0 0 6px 0; color:#c9a6f7; }
+  #hud .row { margin:2px 0; color:#9aa1b5; }
+  #controls { position:absolute; top:10px; right:10px; z-index:10; display:flex; gap:6px; }
+  #controls button { background:#161a23; color:#cdd6f4; border:1px solid #232838;
+                      border-radius:5px; padding:6px 10px; font-size:11px; cursor:pointer;
+                      font-family: 'Courier New', monospace; }
+  #controls button:hover { background:#232838; }
+  #legend { position:absolute; bottom:10px; left:10px; z-index:10;
+            background:rgba(17,20,27,0.85); border:1px solid #232838;
+            border-radius:6px; padding:8px 12px; font-size:11px; }
+  #legend .item { display:inline-block; margin-right:12px; }
+  #legend .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:4px; }
+  #tooltip { position:absolute; z-index:20; pointer-events:none; display:none;
+             background:rgba(17,20,27,0.95); border:1px solid #7ee8d0; border-radius:5px;
+             padding:8px 10px; font-size:11px; max-width:260px; }
+  #tooltip .name { color:#7ee8d0; font-weight:bold; margin-bottom:3px; }
+  #empty { position:absolute; inset:0; display:none; align-items:center; justify-content:center;
+           flex-direction:column; text-align:center; color:#5c6178; z-index:5; }
+  #missing-three { position:absolute; inset:0; display:none; align-items:center; justify-content:center;
+                   flex-direction:column; text-align:center; color:#f2c46d; z-index:30; padding:20px; }
+</style>
+</head>
+<body>
+<div id="canvas-wrap"></div>
+<div id="hud">
+  <h1>ShikaNet — 3D Topology</h1>
+  <div class="row" id="hud-count">0 devices</div>
+  <div class="row" id="hud-selected">Click a device to select it</div>
+</div>
+<div id="controls">
+  <button id="btn-reset">Reset View</button>
+  <button id="btn-fit">Fit to Screen</button>
+  <button id="btn-labels">Toggle Labels</button>
+</div>
+<div id="legend">
+  <span class="item"><span class="dot" style="background:#8fe3b0"></span>Online</span>
+  <span class="item"><span class="dot" style="background:#f38ba8"></span>Offline</span>
+  <span class="item"><span class="dot" style="background:#5c6178"></span>Unknown</span>
+</div>
+<div id="tooltip"></div>
+<div id="empty">
+  <div style="font-size:16px; margin-bottom:6px;">No topology data</div>
+  <div style="font-size:12px;">Run a Discovery Action in ShikaNet, then reopen 3D View.</div>
+</div>
+<div id="missing-three">
+  <div style="font-size:16px; margin-bottom:6px;">three.js not found</div>
+  <div style="font-size:12px; max-width:420px;">
+    This 3D view needs assets/topology3d/three.min.js. See
+    assets/topology3d/README_SETUP.md for how to add it. The 2D topology
+    view in ShikaNet remains fully available.
+  </div>
+</div>
+
+<script>window.TOPOLOGY = __TOPOLOGY_DATA__;</script>
+<script src="three.min.js" onerror="document.getElementById('missing-three').style.display='flex';"></script>
+<script>
+(function () {
+  "use strict";
+  if (typeof THREE === "undefined") { return; } // three.min.js missing — message already shown
+
+  var data = window.TOPOLOGY || {nodes: []};
+  var nodes = data.nodes || [];
+
+  var ROLE_COLOR = {
+    router: 0x89b4fa, switch: 0x8fe3b0, firewall: 0xf38ba8,
+    server: 0xc9a6f7, access_point: 0xf2c46d, generic: 0x9aa1b5, other: 0x9aa1b5
+  };
+  var STATUS_COLOR = { online: 0x8fe3b0, offline: 0xf38ba8, unknown: 0x5c6178 };
+
+  if (nodes.length === 0) {
+    document.getElementById("empty").style.display = "flex";
+    return;
+  }
+  document.getElementById("hud-count").textContent = nodes.length + " device" + (nodes.length === 1 ? "" : "s");
+
+  // ── Scene setup ──────────────────────────────────────────────────────
+  var wrap = document.getElementById("canvas-wrap");
+  var scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0c0e14);
+
+  var camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 2000);
+  var renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  wrap.appendChild(renderer.domElement);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+  var dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
+  dirLight.position.set(50, 80, 50);
+  scene.add(dirLight);
+
+  var grid = new THREE.GridHelper(400, 20, 0x232838, 0x181b24);
+  scene.add(grid);
+
+  // ── Minimal orbit/pan/zoom camera controller (no external addon file) ─
+  var target = new THREE.Vector3(0, 0, 0);
+  var spherical = { radius: 220, theta: Math.PI / 4, phi: Math.PI / 3 };
+  function updateCamera() {
+    var sinPhiRadius = spherical.radius * Math.sin(spherical.phi);
+    camera.position.x = target.x + sinPhiRadius * Math.sin(spherical.theta);
+    camera.position.y = target.y + spherical.radius * Math.cos(spherical.phi);
+    camera.position.z = target.z + sinPhiRadius * Math.cos(spherical.theta);
+    camera.lookAt(target);
+  }
+  updateCamera();
+
+  var dragging = false, panning = false, lastX = 0, lastY = 0;
+  renderer.domElement.addEventListener("mousedown", function (e) {
+    dragging = true; panning = (e.button === 2 || e.shiftKey);
+    lastX = e.clientX; lastY = e.clientY;
+  });
+  window.addEventListener("mouseup", function () { dragging = false; panning = false; });
+  renderer.domElement.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+  renderer.domElement.addEventListener("mousemove", function (e) {
+    if (dragging) {
+      var dx = e.clientX - lastX, dy = e.clientY - lastY;
+      lastX = e.clientX; lastY = e.clientY;
+      if (panning) {
+        var panSpeed = spherical.radius * 0.0015;
+        var right = new THREE.Vector3(); camera.getWorldDirection(right);
+        right.cross(camera.up).normalize();
+        target.addScaledVector(right, -dx * panSpeed);
+        target.y += dy * panSpeed;
+      } else {
+        spherical.theta -= dx * 0.006;
+        spherical.phi = Math.min(Math.max(spherical.phi - dy * 0.006, 0.15), Math.PI - 0.15);
+      }
+      updateCamera();
+    }
+    handleHover(e);
+  });
+  renderer.domElement.addEventListener("wheel", function (e) {
+    e.preventDefault();
+    spherical.radius = Math.min(Math.max(spherical.radius + e.deltaY * 0.2, 40), 900);
+    updateCamera();
+  }, { passive: false });
+
+  function resetView() {
+    target.set(0, 0, 0); spherical.radius = 220; spherical.theta = Math.PI / 4; spherical.phi = Math.PI / 3;
+    updateCamera();
+  }
+  function fitToScreen() {
+    var n = nodeMeshes.length || 1;
+    spherical.radius = Math.min(Math.max(60 + n * 18, 120), 900);
+    target.set(0, 0, 0);
+    updateCamera();
+  }
+  document.getElementById("btn-reset").onclick = resetView;
+  document.getElementById("btn-fit").onclick = fitToScreen;
+
+  // ── Procedural, recognizable-but-lightweight device geometry ─────────
+  // No external model files (offline, small package size) — each role
+  // gets a distinct silhouette built from primitive geometries.
+  function buildDeviceMesh(role) {
+    var group = new THREE.Group();
+    var color = ROLE_COLOR[role] || ROLE_COLOR.generic;
+    var mat = new THREE.MeshStandardMaterial({ color: color, metalness: 0.35, roughness: 0.55 });
+
+    if (role === "switch") {
+      var body = new THREE.Mesh(new THREE.BoxGeometry(14, 3, 6), mat);
+      group.add(body);
+      for (var i = -5.5; i <= 5.5; i += 1.8) {
+        var port = new THREE.Mesh(new THREE.BoxGeometry(1, 1.4, 0.6),
+          new THREE.MeshStandardMaterial({ color: 0x11141b }));
+        port.position.set(i, 0.3, 3.1);
+        group.add(port);
+      }
+    } else if (role === "router") {
+      var base = new THREE.Mesh(new THREE.CylinderGeometry(5, 5, 3, 8), mat);
+      group.add(base);
+      for (var a = 0; a < 4; a++) {
+        var ant = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 6, 6),
+          new THREE.MeshStandardMaterial({ color: 0x232838 }));
+        var ang = a * Math.PI / 2;
+        ant.position.set(Math.cos(ang) * 4, 4, Math.sin(ang) * 4);
+        ant.rotation.z = Math.PI / 10;
+        group.add(ant);
+      }
+    } else if (role === "firewall") {
+      var brick = new THREE.Mesh(new THREE.BoxGeometry(12, 4, 8), mat);
+      group.add(brick);
+      var shield = new THREE.Mesh(new THREE.ConeGeometry(2.4, 4, 4),
+        new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.1, roughness: 0.4 }));
+      shield.position.set(0, 3.2, 0); shield.rotation.x = Math.PI;
+      group.add(shield);
+    } else if (role === "server") {
+      for (var s = 0; s < 3; s++) {
+        var slab = new THREE.Mesh(new THREE.BoxGeometry(10, 1.6, 9), mat);
+        slab.position.y = s * 2.1;
+        group.add(slab);
+      }
+    } else if (role === "access_point") {
+      var disc = new THREE.Mesh(new THREE.CylinderGeometry(4, 4, 1, 16), mat);
+      group.add(disc);
+      var dome = new THREE.Mesh(new THREE.SphereGeometry(2, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+        new THREE.MeshStandardMaterial({ color: color, opacity: 0.85, transparent: true }));
+      dome.position.y = 0.8;
+      group.add(dome);
+    } else { // generic / other — plain recognizable network box
+      var box = new THREE.Mesh(new THREE.BoxGeometry(9, 5, 7), mat);
+      group.add(box);
+    }
+    return group;
+  }
+
+  function makeLabelSprite(text) {
+    var canvas = document.createElement("canvas");
+    canvas.width = 256; canvas.height = 64;
+    var ctx = canvas.getContext("2d");
+    ctx.font = "bold 26px monospace";
+    ctx.fillStyle = "#cdd6f4";
+    ctx.textAlign = "center";
+    ctx.fillText(text.substring(0, 20), 128, 40);
+    var tex = new THREE.CanvasTexture(canvas);
+    var mat = new THREE.SpriteMaterial({ map: tex, depthTest: false });
+    var sprite = new THREE.Sprite(mat);
+    sprite.scale.set(18, 4.5, 1);
+    return sprite;
+  }
+
+  // ── Layout: real devices only, arranged in a circle (no fabricated
+  //    positions beyond simple placement — ShikaNet has no coordinate
+  //    data to place them more precisely) ────────────────────────────
+  var nodeMeshes = [];
+  var byName = {};
+  var radius = Math.max(40, nodes.length * 12);
+  nodes.forEach(function (n, i) {
+    var angle = (2 * Math.PI * i) / nodes.length;
+    var x = radius * Math.cos(angle);
+    var z = radius * Math.sin(angle);
+    var group = buildDeviceMesh(n.role);
+    group.position.set(x, 2.5, z);
+    group.userData = n;
+
+    var statusColor = STATUS_COLOR[n.status] || STATUS_COLOR.unknown;
+    var ring = new THREE.Mesh(
+      new THREE.TorusGeometry(7, 0.4, 8, 24),
+      new THREE.MeshBasicMaterial({ color: statusColor })
+    );
+    ring.rotation.x = Math.PI / 2; ring.position.y = -1.8;
+    group.add(ring);
+
+    var label = makeLabelSprite(n.name);
+    label.position.set(0, 8, 0);
+    group.add(label);
+
+    scene.add(group);
+    nodeMeshes.push(group);
+    byName[n.name] = { x: x, y: 2.5, z: z };
+  });
+
+  // Links — only drawn between nodes that are both present, using the
+  // real neighbor lists from self._topo_nodes.
+  nodes.forEach(function (n) {
+    (n.neighbors || []).forEach(function (nb) {
+      if (byName[nb] && byName[n.name]) {
+        var a = byName[n.name], b = byName[nb];
+        var geo = new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(a.x, a.y, a.z), new THREE.Vector3(b.x, b.y, b.z)
+        ]);
+        var line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0x5c6178 }));
+        scene.add(line);
+      }
+    });
+  });
+
+  var labelsVisible = true;
+  document.getElementById("btn-labels").onclick = function () {
+    labelsVisible = !labelsVisible;
+    nodeMeshes.forEach(function (g) {
+      g.children.forEach(function (c) { if (c.type === "Sprite") c.visible = labelsVisible; });
+    });
+  };
+
+  // ── Selection + hover ──────────────────────────────────────────────
+  var raycaster = new THREE.Raycaster();
+  var mouse = new THREE.Vector2();
+  var tooltip = document.getElementById("tooltip");
+
+  function pickNode(e) {
+    var rect = renderer.domElement.getBoundingClientRect();
+    mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+    var hits = raycaster.intersectObjects(nodeMeshes, true);
+    if (hits.length === 0) return null;
+    var obj = hits[0].object;
+    while (obj && !obj.userData.name) obj = obj.parent;
+    return obj;
+  }
+
+  function handleHover(e) {
+    var hit = pickNode(e);
+    if (hit) {
+      var d = hit.userData;
+      tooltip.style.display = "block";
+      tooltip.style.left = (e.clientX + 14) + "px";
+      tooltip.style.top = (e.clientY + 14) + "px";
+      tooltip.innerHTML = "<div class='name'>" + d.name + "</div>" +
+        "Role: " + d.role + "<br>Status: " + d.status +
+        (d.host ? ("<br>Host: " + d.host) : "");
+    } else {
+      tooltip.style.display = "none";
+    }
+  }
+
+  renderer.domElement.addEventListener("click", function (e) {
+    var hit = pickNode(e);
+    if (!hit) return;
+    var d = hit.userData;
+    document.getElementById("hud-selected").textContent = "Selected: " + d.name;
+    // Bridge back into real ShikaNet functionality (device details) —
+    // no parallel device UI is created here.
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.select_device) {
+      window.pywebview.api.select_device(d.name);
+    }
+  });
+
+  // ── Render loop ───────────────────────────────────────────────────
+  function animate() {
+    requestAnimationFrame(animate);
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  window.addEventListener("resize", function () {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+})();
+</script>
+</body>
+</html>
+"""
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIG TEMPLATES
@@ -373,6 +769,14 @@ class DeviceDlg(tk.Toplevel):
         self.fast=tk.BooleanVar(value=pf.get("fast_cli",False))
         ttk.Checkbutton(tf,text="fast_cli",variable=self.fast,
                         bootstyle="primary").grid(row=7,column=1,sticky=W,padx=10)
+        ttk.Label(tf,text="Device Role",font=(FONT_MONO,9,"bold")).grid(row=8,column=0,sticky=W,**pad)
+        self.drole=tk.StringVar(value=pf.get("role","auto"))
+        ttk.Combobox(tf,textvariable=self.drole,values=DEVICE_ROLES,
+                     state="readonly",font=(FONT_MONO,10),width=34).grid(row=8,column=1,**pad)
+        ttk.Label(tf,text="Used for Topology icons. 'auto' guesses from the device name;\n"
+                          "set it explicitly for an accurate icon in the 3D/2D topology view.",
+                  font=(FONT_MONO,7),bootstyle="secondary",justify=LEFT).grid(
+            row=9,column=0,columnspan=2,sticky=W,padx=10,pady=(0,4))
 
         # Tab 2: Jump host (SSH proxy through AP / bastion)
         jf=ttk.Frame(nb,padding=8); nb.add(jf,text="  Jump Host / AP  ")
@@ -476,6 +880,7 @@ class DeviceDlg(tk.Toplevel):
             "password":self.ent["Password"].get().strip(),
             "port":port,"fast_cli":self.fast.get(),
             "key_file":self.ent["Key File"].get().strip(),
+            "role":self.drole.get(),
             "jump_host":self.jent["Jump Host IP"].get().strip(),
             "jump_username":self.jent["Jump Username"].get().strip(),
             "jump_password":self.jent["Jump Password"].get().strip(),
@@ -532,6 +937,7 @@ class SidebarNotebook(ttk.Frame):
     """
 
     _GROUPS = [
+        ("OVERVIEW",    ["Dashboard"]),
         ("CORE",        ["Commands","Custom CLI","Config Write","Troubleshoot"]),
         ("DATA",        ["Backup","Diff","Monitoring","Inventory","Audit"]),
         ("NETWORK",     ["Multi-Device","Discovery","Topology"]),
@@ -550,14 +956,31 @@ class SidebarNotebook(ttk.Frame):
         self._header_indices = set()
         self._lb_to_tab      = {}
 
-        # ── Left sidebar ──────────────────────────────────────────────────
-        sidebar = ttk.Frame(self, width=195)
+        # ── Left sidebar (profile block + grouped nav + live status foot) ──
+        sidebar = ttk.Frame(self, width=210, bootstyle="dark")
         sidebar.pack(side=LEFT, fill=Y)
         sidebar.pack_propagate(False)
 
+        # -- Profile / identity block (mirrors the reference dashboard's
+        #    top-left "app · device · id" card) --------------------------
+        prof = ttk.Frame(sidebar, padding=(14, 14, 14, 10))
+        prof.pack(fill=X)
+        prow = ttk.Frame(prof); prow.pack(fill=X)
+        ttk.Label(prow, text="🛰️", font=("Segoe UI Emoji", 18)).pack(side=LEFT, padx=(0, 6))
+        ttk.Label(prow, text="ShikaNet", font=(FONT_MONO, 12, "bold"),
+                  bootstyle="light").pack(side=LEFT)
+        self.sb_status_dot = ttk.Label(prow, text="●", font=(FONT_MONO, 10),
+                                        bootstyle="danger")
+        self.sb_status_dot.pack(side=RIGHT)
+        self.sb_device_lbl = ttk.Label(prof, text="No device selected",
+                                        font=(FONT_MONO, 8), bootstyle="secondary",
+                                        wraplength=180, justify=LEFT)
+        self.sb_device_lbl.pack(anchor=W, pady=(4, 0), fill=X)
+        ttk.Separator(sidebar, orient=HORIZONTAL).pack(fill=X, padx=10, pady=(4, 6))
+
         ttk.Label(sidebar, text="NAVIGATION",
                   font=(FONT_MONO, 8, "bold"),
-                  bootstyle="secondary").pack(anchor=W, padx=10, pady=(10, 4))
+                  bootstyle="secondary").pack(anchor=W, padx=14, pady=(0, 4))
 
         lbf = ttk.Frame(sidebar)
         lbf.pack(fill=BOTH, expand=True, padx=4, pady=(0, 6))
@@ -565,11 +988,12 @@ class SidebarNotebook(ttk.Frame):
         self._lb = tk.Listbox(
             lbf,
             font=(FONT_MONO, 9),
-            bg=TERM_BG, fg=TERM_TEXT,
+            bg=SIDEBAR_BG, fg=TERM_TEXT,
             selectbackground=TERM_PUR,
             selectforeground="#000",
             relief="flat", bd=0,
             activestyle="none",
+            highlightthickness=0,
         )
         _sc = ttk.Scrollbar(lbf, orient=VERTICAL,
                              command=self._lb.yview,
@@ -579,11 +1003,63 @@ class SidebarNotebook(ttk.Frame):
         _sc.pack(side=RIGHT, fill=Y)
         self._lb.bind("<<ListboxSelect>>", self._on_select)
 
+        # -- Bottom status footer (mirrors the reference's small stat card
+        #    pinned under the nav list). Populated by App._refresh_sidebar_foot
+        #    with real counts — never fabricated data. --------------------
+        ttk.Separator(sidebar, orient=HORIZONTAL).pack(fill=X, padx=10, pady=(0, 6))
+        foot = ttk.Frame(sidebar, padding=(14, 0, 14, 12))
+        foot.pack(fill=X, side=BOTTOM)
+        self.sb_foot_lbl = ttk.Label(foot, text="Devices: —   Online: —",
+                                      font=(FONT_MONO, 8), bootstyle="secondary",
+                                      justify=LEFT)
+        self.sb_foot_lbl.pack(anchor=W)
+        self.sb_foot_updated = ttk.Label(foot, text="", font=(FONT_MONO, 7),
+                                          bootstyle="secondary")
+        self.sb_foot_updated.pack(anchor=W, pady=(2, 0))
+
         ttk.Separator(self, orient=VERTICAL).pack(side=LEFT, fill=Y)
 
         # ── Content area ──────────────────────────────────────────────────
         self._content = ttk.Frame(self)
         self._content.pack(side=LEFT, fill=BOTH, expand=True)
+
+    # ── Sidebar status helpers (called from App; never invents data) ──────
+    def set_connection_status(self, connected: bool, device_text: str = ""):
+        """Update the profile block's status dot + device line. Safe no-op
+        if called before the widgets exist."""
+        try:
+            self.sb_status_dot.configure(bootstyle="success" if connected else "danger")
+            self.sb_device_lbl.configure(
+                text=device_text or ("Connected" if connected else "No device selected"))
+        except Exception:
+            pass
+
+    def set_footer_stats(self, total, online, last_updated):
+        try:
+            self.sb_foot_lbl.configure(text=f"Devices: {total}   Online: {online}")
+            self.sb_foot_updated.configure(text=f"Updated {last_updated}")
+        except Exception:
+            pass
+
+    def index_of_frame(self, frame):
+        """Find a tab's current index by its (immutable) frame widget, rather
+        than its (mutable) label text. Used by _set_status so the connection
+        badge always updates the real Commands tab, even after other tabs are
+        inserted before it or its own label text changes."""
+        for idx, (_, fr) in enumerate(self._tabs):
+            if fr is frame:
+                return idx
+        return None
+
+    def select_by_label(self, keyword):
+        """Select the first tab whose label contains `keyword` (case-insensitive).
+        Safer than magic index arithmetic when new tabs are inserted."""
+        keyword = keyword.lower()
+        for idx, (label, _) in enumerate(self._tabs):
+            if keyword in label.lower():
+                self.select(idx)
+                return True
+        return False
 
     # ── Helpers ───────────────────────────────────────────────────────────
     def _group_for(self, label):
@@ -1027,24 +1503,41 @@ class App:
     # TAB 0 — COMMAND CENTER
     # ═════════════════════════════════════════════════════════════════════════
     def _tab_commands(self):
-        f=ttk.Frame(self.nb); self.nb.add(f,text="  📡  Commands  ")
-        sb=ttk.Frame(f,padding=(8,8,4,8),width=250); sb.pack(side=LEFT,fill=Y); sb.pack_propagate(False)
-        leg=ttk.Frame(sb); leg.pack(anchor=W,pady=(0,4))
+        f=ttk.Frame(self.nb,padding=(10,8)); self.nb.add(f,text="  📡  Commands  ")
+        self._commands_tab_frame = f   # stable reference so _set_status can find this
+                                        # tab's index even after Dashboard is inserted
+                                        # at position 0 and/or the label text changes.
+
+        self._mk_context_bar(f).pack(fill=X, pady=(0,8))
+
+        body=ttk.Frame(f); body.pack(fill=BOTH,expand=True)
+
+        sb=ttk.Frame(body,padding=(0,0,6,0),width=260); sb.pack(side=LEFT,fill=Y); sb.pack_propagate(False)
+        sb_card=ttk.Frame(sb,bootstyle="dark",padding=(10,10)); sb_card.pack(fill=BOTH,expand=True)
+
+        ttk.Label(sb_card,text="SCOPE LEGEND",font=(FONT_MONO,8,"bold"),
+                  bootstyle="secondary").pack(anchor=W,pady=(0,4))
+        leg=ttk.Frame(sb_card); leg.pack(anchor=W,pady=(0,8))
         for t,bs in [("🔵 Router","info"),("🟢 Switch","success"),("🔀 Both","secondary")]:
             ttk.Label(leg,text=t,font=(FONT_MONO,8),bootstyle=bs).pack(side=LEFT,padx=3)
-        ttk.Separator(sb,orient=HORIZONTAL).pack(fill=X,pady=(0,4))
-        self.btn_all=ttk.Button(sb,text="▶▶ Run All Show",command=self._run_all_show,
+
+        ttk.Label(sb_card,text="QUICK ACTIONS",font=(FONT_MONO,8,"bold"),
+                  bootstyle="secondary").pack(anchor=W,pady=(0,4))
+        self.btn_all=ttk.Button(sb_card,text="▶▶ Run All Show",command=self._run_all_show,
                                 bootstyle="warning",state=DISABLED)
         self.btn_all.pack(fill=X,pady=2,padx=2); tip(self.btn_all,"Run every show command (Ctrl+R)")
-        self.btn_hc=ttk.Button(sb,text="❤  Health Check",command=self._health_check,
+        self.btn_hc=ttk.Button(sb_card,text="❤  Health Check",command=self._health_check,
                                bootstyle="danger-outline",state=DISABLED)
         self.btn_hc.pack(fill=X,pady=2,padx=2); tip(self.btn_hc,"Focused health diagnostics (Ctrl+H)")
-        self.btn_inv=ttk.Button(sb,text="📋 Collect Inventory",command=self._collect_inv,
+        self.btn_inv=ttk.Button(sb_card,text="📋 Collect Inventory",command=self._collect_inv,
                                 bootstyle="info-outline",state=DISABLED)
         self.btn_inv.pack(fill=X,pady=2,padx=2); tip(self.btn_inv,"Collect full device inventory")
-        ttk.Separator(sb,orient=HORIZONTAL).pack(fill=X,pady=(4,4))
-        lc=ttk.Frame(sb); lc.pack(fill=BOTH,expand=True)
-        cv=tk.Canvas(lc,highlightthickness=0,bg=DARKLY_BG)
+
+        ttk.Separator(sb_card,orient=HORIZONTAL).pack(fill=X,pady=(8,6))
+        ttk.Label(sb_card,text="COMMAND LIBRARY",font=(FONT_MONO,8,"bold"),
+                  bootstyle="secondary").pack(anchor=W,pady=(0,4))
+        lc=ttk.Frame(sb_card); lc.pack(fill=BOTH,expand=True)
+        cv=tk.Canvas(lc,highlightthickness=0,bg=CARD_BG)
         sc=ttk.Scrollbar(lc,orient=VERTICAL,command=cv.yview,bootstyle="primary-round")
         inn=ttk.Frame(cv)
         inn.bind("<Configure>",lambda e:cv.configure(scrollregion=cv.bbox("all")))
@@ -1062,29 +1555,42 @@ class App:
             btn=ttk.Button(inn,text=label,command=lambda c=cmd:self._run_cmd(c),
                            bootstyle=bs,state=DISABLED)
             btn.pack(fill=X,pady=2,padx=2); tip(btn,cmd); self.cmd_btns.append(btn)
-        ttk.Separator(sb,orient=HORIZONTAL).pack(fill=X,pady=(6,4))
-        ttk.Button(sb,text="⊘  Clear Output",command=lambda:self._clr(self.cmd_out),
+        ttk.Separator(sb_card,orient=HORIZONTAL).pack(fill=X,pady=(6,4))
+        ttk.Button(sb_card,text="⊘  Clear Output",command=lambda:self._clr(self.cmd_out),
                    bootstyle="secondary-outline").pack(fill=X,padx=2)
-        ttk.Separator(f,orient=VERTICAL).pack(side=LEFT,fill=Y,padx=4)
-        r=ttk.Frame(f,padding=(8,8)); r.pack(side=LEFT,fill=BOTH,expand=True)
-        self._hdr(r,"OUTPUT")
-        self.cmd_out=self._mkbox(r)
-        self._search(r,self.cmd_out)
+
+        r=ttk.Frame(body,padding=(6,0,0,0)); r.pack(side=LEFT,fill=BOTH,expand=True)
+        rcard=ttk.Frame(r,bootstyle="dark",padding=(12,10)); rcard.pack(fill=BOTH,expand=True)
+        self._shdr(rcard,"OUTPUT")
+        self.cmd_out=self._mkbox(rcard)
+        self._search(rcard,self.cmd_out)
+        self._write(self.cmd_out,
+                     "  Connect to a device above, then pick a command from the "
+                     "library on the left to see its output here.\n","div")
 
     # ═════════════════════════════════════════════════════════════════════════
     # TAB 1 — CUSTOM CLI
     # ═════════════════════════════════════════════════════════════════════════
     def _tab_cli(self):
-        f=ttk.Frame(self.nb,padding=(16,12)); self.nb.add(f,text="  ⌨️   Custom CLI  ")
-        ttk.Label(f,text="Commands — one per line  (↑↓ history, Ctrl+Enter to run):",
-                  font=(FONT_MONO,9),bootstyle="secondary").pack(anchor=W,pady=(0,4))
-        self.cli_in=tk.Text(f,height=5,font=(FONT_MONO,10),bg=TERM_BG,fg=TERM_TEXT,
+        f=ttk.Frame(self.nb,padding=(10,8)); self.nb.add(f,text="  ⌨️   Custom CLI  ")
+
+        self._mk_context_bar(f).pack(fill=X, pady=(0,8))
+
+        icard=ttk.Frame(f,bootstyle="dark",padding=(12,10)); icard.pack(fill=X,pady=(0,10))
+        ttk.Label(icard,text="COMMAND INPUT",font=(FONT_MONO,9,"bold"),
+                  bootstyle="light").pack(anchor=W,pady=(0,2))
+        ttk.Label(icard,text="One command per line   ·   ↑↓ for history   ·   Ctrl+Enter to run",
+                  font=(FONT_MONO,8),bootstyle="secondary").pack(anchor=W,pady=(0,6))
+        self.cli_in=tk.Text(icard,height=5,font=(FONT_MONO,10),bg=TERM_BG,fg=TERM_TEXT,
                             insertbackground=TERM_TEXT,relief="flat",bd=0,padx=8,pady=6)
         self.cli_in.pack(fill=X,pady=(0,6))
         self.cli_in.bind("<Up>",   self._hi_up)
         self.cli_in.bind("<Down>", self._hi_dn)
         self.cli_in.bind("<Control-Return>",lambda _:self._run_cli())
-        br=ttk.Frame(f); br.pack(anchor=W,pady=(0,8))
+        ttk.Label(icard,text="⚠  Commands run directly on the connected device — double-check "
+                              "before running configuration-mode commands.",
+                  font=(FONT_MONO,7),bootstyle="warning").pack(anchor=W,pady=(0,6))
+        br=ttk.Frame(icard); br.pack(anchor=W)
         ttk.Button(br,text="▶  Run Commands",command=self._run_cli,
                    bootstyle="success",width=18).pack(side=LEFT,padx=(0,6))
         ttk.Button(br,text="Clear Input",
@@ -1092,19 +1598,34 @@ class App:
                    bootstyle="secondary-outline",width=12).pack(side=LEFT,padx=(0,6))
         ttk.Button(br,text="History ▾",command=self._hist_menu,
                    bootstyle="info-outline",width=12).pack(side=LEFT)
-        ttk.Separator(f,orient=HORIZONTAL).pack(fill=X,pady=(0,8))
-        self._hdr(f,"OUTPUT")
-        self.cli_out=self._mkbox(f)
-        self._search(f,self.cli_out)
+
+        ocard=ttk.Frame(f,bootstyle="dark",padding=(12,10)); ocard.pack(fill=BOTH,expand=True)
+        self._shdr(ocard,"OUTPUT")
+        self.cli_out=self._mkbox(ocard)
+        self._search(ocard,self.cli_out)
+        self._write(self.cli_out,
+                     "  Type one or more commands above and click ▶ Run Commands "
+                     "(or press Ctrl+Enter) to see the output here.\n","div")
 
     # ═════════════════════════════════════════════════════════════════════════
     # TAB 2 — CONFIG WRITE (all write operations in one tabbed pane)
     # ═════════════════════════════════════════════════════════════════════════
     def _tab_config(self):
-        outer=ttk.Frame(self.nb); self.nb.add(outer,text="  ⚙️   Config Write  ")
-        left=ttk.Frame(outer,padding=(8,8,4,8),width=390)
+        outer=ttk.Frame(self.nb,padding=(10,8)); self.nb.add(outer,text="  ⚙️   Config Write  ")
+
+        self._mk_context_bar(outer).pack(fill=X, pady=(0,8))
+
+        body=ttk.Frame(outer); body.pack(fill=BOTH,expand=True)
+
+        left=ttk.Frame(body,padding=(0,0,6,0),width=400)
         left.pack(side=LEFT,fill=Y); left.pack_propagate(False)
-        nb2=ttk.Notebook(left,bootstyle="secondary"); nb2.pack(fill=BOTH,expand=True)
+        lcard=ttk.Frame(left,bootstyle="dark",padding=(10,10)); lcard.pack(fill=BOTH,expand=True)
+        ttk.Label(lcard,text="CONFIGURATION FORM",font=(FONT_MONO,9,"bold"),
+                  bootstyle="light").pack(anchor=W)
+        ttk.Label(lcard,text="Choose a type below, fill in the fields, then Preview before writing.",
+                  font=(FONT_MONO,7),bootstyle="secondary",wraplength=360,
+                  justify=LEFT).pack(anchor=W,pady=(2,8))
+        nb2=ttk.Notebook(lcard,bootstyle="secondary"); nb2.pack(fill=BOTH,expand=True)
 
         # ── Interface tab ───────────────────────────────────────────────────
         itf=ttk.Frame(nb2,padding=(8,8)); nb2.add(itf,text="Interface")
@@ -1117,8 +1638,8 @@ class App:
                             ("Duplex","duplex","full / half / auto")]:
             self.if_flds[key]=self._ff(itf,lbl,ph)
         brf=ttk.Frame(itf); brf.pack(anchor=W,pady=(8,4))
-        for t,c,bs in [("Preview",self._prev_iface,"info"),("▶ Apply",self._apply_iface,"success")]:
-            ttk.Button(brf,text=t,command=c,bootstyle=bs,width=13).pack(side=LEFT,padx=(0,4))
+        for t,c,bs in [("👁 Preview",self._prev_iface,"info"),("✅ Write Configuration",self._apply_iface,"success")]:
+            ttk.Button(brf,text=t,command=c,bootstyle=bs,width=20).pack(side=LEFT,padx=(0,4))
         ttk.Separator(itf,orient=HORIZONTAL).pack(fill=X,pady=(10,8))
         ttk.Label(itf,text="Quick Actions",font=(FONT_MONO,8,"bold"),
                   bootstyle="secondary").pack(anchor=W,pady=(0,4))
@@ -1143,8 +1664,8 @@ class App:
             ttk.Radiobutton(mr,text=m.capitalize(),variable=self.vlan_mode,
                             value=m,bootstyle="primary").pack(side=LEFT,padx=8)
         br2=ttk.Frame(vt); br2.pack(anchor=W,pady=4)
-        for t,c,bs in [("Preview",self._prev_vlan,"info"),("▶ Apply",self._apply_vlan,"success")]:
-            ttk.Button(br2,text=t,command=c,bootstyle=bs,width=13).pack(side=LEFT,padx=(0,4))
+        for t,c,bs in [("👁 Preview",self._prev_vlan,"info"),("✅ Write Configuration",self._apply_vlan,"success")]:
+            ttk.Button(br2,text=t,command=c,bootstyle=bs,width=20).pack(side=LEFT,padx=(0,4))
 
         # ── Routing tab ───────────────────────────────────────────────────
         rt=ttk.Frame(nb2,padding=(8,8)); nb2.add(rt,text="Routing")
@@ -1158,8 +1679,8 @@ class App:
         self.rt_ff=ttk.Frame(rt); self.rt_ff.pack(fill=X)
         self.rt_flds={}; self._ref_rt()
         br3=ttk.Frame(rt); br3.pack(anchor=W,pady=8)
-        for t,c,bs in [("Preview",self._prev_rt,"info"),("▶ Apply",self._apply_rt,"success")]:
-            ttk.Button(br3,text=t,command=c,bootstyle=bs,width=13).pack(side=LEFT,padx=(0,4))
+        for t,c,bs in [("👁 Preview",self._prev_rt,"info"),("✅ Write Configuration",self._apply_rt,"success")]:
+            ttk.Button(br3,text=t,command=c,bootstyle=bs,width=20).pack(side=LEFT,padx=(0,4))
 
         # ── Security / Services tab ────────────────────────────────────────
         st=ttk.Frame(nb2,padding=(8,8)); nb2.add(st,text="Security/Svcs")
@@ -1173,8 +1694,8 @@ class App:
         self.sec_ff=ttk.Frame(st); self.sec_ff.pack(fill=X)
         self.sec_flds={}; self._ref_sec()
         br4=ttk.Frame(st); br4.pack(anchor=W,pady=8)
-        for t,c,bs in [("Preview",self._prev_sec,"info"),("▶ Apply",self._apply_sec,"success")]:
-            ttk.Button(br4,text=t,command=c,bootstyle=bs,width=13).pack(side=LEFT,padx=(0,4))
+        for t,c,bs in [("👁 Preview",self._prev_sec,"info"),("✅ Write Configuration",self._apply_sec,"success")]:
+            ttk.Button(br4,text=t,command=c,bootstyle=bs,width=20).pack(side=LEFT,padx=(0,4))
 
         # ── Port Security tab ──────────────────────────────────────────────
         ps=ttk.Frame(nb2,padding=(8,8)); nb2.add(ps,text="Port Security")
@@ -1184,27 +1705,37 @@ class App:
                             ("Violation","action","shutdown / restrict / protect")]:
             self.ps_flds[key]=self._ff(ps,lbl,ph)
         br5=ttk.Frame(ps); br5.pack(anchor=W,pady=8)
-        for t,c,bs in [("Preview",self._prev_ps,"info"),("▶ Apply",self._apply_ps,"success")]:
-            ttk.Button(br5,text=t,command=c,bootstyle=bs,width=13).pack(side=LEFT,padx=(0,4))
+        for t,c,bs in [("👁 Preview",self._prev_ps,"info"),("✅ Write Configuration",self._apply_ps,"success")]:
+            ttk.Button(br5,text=t,command=c,bootstyle=bs,width=20).pack(side=LEFT,padx=(0,4))
 
-        ttk.Separator(outer,orient=VERTICAL).pack(side=LEFT,fill=Y,padx=4)
-        r=ttk.Frame(outer,padding=(8,8)); r.pack(side=LEFT,fill=BOTH,expand=True)
-        self._hdr(r,"CLI PREVIEW / OUTPUT")
-        self.cfg_out=self._mkbox(r)
+        r=ttk.Frame(body,padding=(6,0,0,0)); r.pack(side=LEFT,fill=BOTH,expand=True)
+        rcard=ttk.Frame(r,bootstyle="dark",padding=(12,10)); rcard.pack(fill=BOTH,expand=True)
+        self._shdr(rcard,"REVIEW & RESULT")
+        self.cfg_out=self._mkbox(rcard)
+        self._write(self.cfg_out,
+                     "  Click 👁 Preview to see the exact CLI that will be sent, or "
+                     "✅ Write Configuration to push it to the target device.\n","div")
 
     # ═════════════════════════════════════════════════════════════════════════
     # TAB 3 — TROUBLESHOOT
     # ═════════════════════════════════════════════════════════════════════════
     def _tab_trouble(self):
-        f=ttk.Frame(self.nb); self.nb.add(f,text="  🛠️   Troubleshoot  ")
-        left=ttk.Frame(f,padding=(14,12,8,12),width=380)
+        f=ttk.Frame(self.nb,padding=(10,8)); self.nb.add(f,text="  🛠️   Troubleshoot  ")
+
+        self._mk_context_bar(f).pack(fill=X, pady=(0,8))
+
+        body=ttk.Frame(f); body.pack(fill=BOTH,expand=True)
+
+        left=ttk.Frame(body,padding=(0,0,6,0),width=390)
         left.pack(side=LEFT,fill=Y); left.pack_propagate(False)
-        self._shdr(left,"TROUBLESHOOTING TOOLS")
+        card=ttk.Frame(left,bootstyle="dark",padding=(12,10)); card.pack(fill=BOTH,expand=True)
+        ttk.Label(card,text="DIAGNOSTIC TOOLS",font=(FONT_MONO,9,"bold"),
+                  bootstyle="light").pack(anchor=W,pady=(0,8))
 
         # Ping / Traceroute / TCP
-        ttk.Label(left,text="Connectivity Tests",font=(FONT_MONO,9,"bold"),
+        ttk.Label(card,text="Connectivity Tests",font=(FONT_MONO,9,"bold"),
                   bootstyle="info").pack(anchor=W,pady=(0,4))
-        row1=ttk.Frame(left); row1.pack(fill=X,pady=(0,4))
+        row1=ttk.Frame(card); row1.pack(fill=X,pady=(0,4))
         ttk.Label(row1,text="Target IP:",font=(FONT_MONO,9)).pack(side=LEFT)
         self.trbl_ip=ttk.Entry(row1,font=(FONT_MONO,10),width=20)
         self.trbl_ip.pack(side=LEFT,padx=(6,8),ipady=2)
@@ -1212,52 +1743,52 @@ class App:
         self.trbl_cnt=ttk.Spinbox(row1,from_=1,to=100,width=4,font=(FONT_MONO,9))
         self.trbl_cnt.set(5); self.trbl_cnt.pack(side=LEFT,padx=(4,0))
 
-        row2=ttk.Frame(left); row2.pack(fill=X,pady=(0,4))
+        row2=ttk.Frame(card); row2.pack(fill=X,pady=(0,4))
         for t,c,bs,h in [("Ping",self._ping,"info","ICMP ping with repeat count"),
                           ("Traceroute",self._trace,"info-outline","Traceroute to target"),
                           ("TCP Test",self._tcp_test,"secondary-outline","Test TCP port connectivity")]:
             b=ttk.Button(row2,text=t,command=c,bootstyle=bs,width=13)
             b.pack(side=LEFT,padx=(0,4)); tip(b,h)
 
-        ttk.Label(left,text="TCP Port (for TCP Test):",
+        ttk.Label(card,text="TCP Port (for TCP Test):",
                   font=(FONT_MONO,8),bootstyle="secondary").pack(anchor=W,pady=(4,0))
-        self.tcp_port=ttk.Entry(left,font=(FONT_MONO,10),width=10)
+        self.tcp_port=ttk.Entry(card,font=(FONT_MONO,10),width=10)
         self.tcp_port.insert(0,"22"); self.tcp_port.pack(anchor=W,ipady=3,pady=(2,10))
 
-        ttk.Separator(left,orient=HORIZONTAL).pack(fill=X,pady=(4,8))
+        ttk.Separator(card,orient=HORIZONTAL).pack(fill=X,pady=(4,8))
 
         # Interface diagnostics
-        ttk.Label(left,text="Interface Diagnostics",font=(FONT_MONO,9,"bold"),
+        ttk.Label(card,text="Interface Diagnostics",font=(FONT_MONO,9,"bold"),
                   bootstyle="warning").pack(anchor=W,pady=(0,4))
-        ttk.Label(left,text="Interface:",font=(FONT_MONO,8),
+        ttk.Label(card,text="Interface:",font=(FONT_MONO,8),
                   bootstyle="secondary").pack(anchor=W,pady=(0,2))
-        self.trbl_iface=ttk.Entry(left,font=(FONT_MONO,10))
+        self.trbl_iface=ttk.Entry(card,font=(FONT_MONO,10))
         self.trbl_iface.insert(0,"GigabitEthernet0/1")
         self.trbl_iface.pack(fill=X,ipady=3,pady=(0,6))
 
-        row3=ttk.Frame(left); row3.pack(fill=X,pady=(0,4))
+        row3=ttk.Frame(card); row3.pack(fill=X,pady=(0,4))
         for t,c,bs,h in [("Show Errors",self._show_errors,"secondary-outline","Show interface error counters"),
                           ("Clear Counters",self._clear_cnt,"warning-outline","Clear interface statistics")]:
             b=ttk.Button(row3,text=t,command=c,bootstyle=bs)
             b.pack(side=LEFT,padx=(0,4)); tip(b,h)
 
-        ttk.Separator(left,orient=HORIZONTAL).pack(fill=X,pady=(8,8))
+        ttk.Separator(card,orient=HORIZONTAL).pack(fill=X,pady=(8,8))
 
         # Table operations
-        ttk.Label(left,text="Clear Tables",font=(FONT_MONO,9,"bold"),
+        ttk.Label(card,text="Clear Tables ⚠",font=(FONT_MONO,9,"bold"),
                   bootstyle="danger").pack(anchor=W,pady=(0,4))
-        row4=ttk.Frame(left); row4.pack(fill=X,pady=(0,4))
+        row4=ttk.Frame(card); row4.pack(fill=X,pady=(0,4))
         for t,c,bs,h in [("Clear ARP",self._clear_arp,"danger-outline","Clear ARP cache"),
                           ("Clear MAC Table",self._clear_mac,"danger-outline","Clear MAC address table")]:
             b=ttk.Button(row4,text=t,command=c,bootstyle=bs)
             b.pack(side=LEFT,padx=(0,4)); tip(b,h)
 
-        ttk.Separator(left,orient=HORIZONTAL).pack(fill=X,pady=(8,8))
+        ttk.Separator(card,orient=HORIZONTAL).pack(fill=X,pady=(8,8))
 
         # Quick status
-        ttk.Label(left,text="Quick Status",font=(FONT_MONO,9,"bold"),
+        ttk.Label(card,text="Quick Status",font=(FONT_MONO,9,"bold"),
                   bootstyle="success").pack(anchor=W,pady=(0,4))
-        qs=ttk.Frame(left); qs.pack(fill=X,pady=(0,4))
+        qs=ttk.Frame(card); qs.pack(fill=X,pady=(0,4))
         for cmd,lbl,h in [("show interfaces","Interfaces","Full interface detail"),
                            ("show ip interface brief","Brief","Interface summary"),
                            ("show processes cpu","CPU","CPU utilisation"),
@@ -1268,102 +1799,133 @@ class App:
                          bootstyle="secondary-outline")
             b.pack(side=LEFT,padx=2); tip(b,h)
 
-        ttk.Separator(f,orient=VERTICAL).pack(side=LEFT,fill=Y,padx=4)
-        r=ttk.Frame(f,padding=(8,8)); r.pack(side=LEFT,fill=BOTH,expand=True)
-        self._hdr(r,"OUTPUT")
-        self.ts_out=self._mkbox(r)
-        self._search(r,self.ts_out)
+        r=ttk.Frame(body,padding=(6,0,0,0)); r.pack(side=LEFT,fill=BOTH,expand=True)
+        rcard=ttk.Frame(r,bootstyle="dark",padding=(12,10)); rcard.pack(fill=BOTH,expand=True)
+        self._shdr(rcard,"OUTPUT")
+        self.ts_out=self._mkbox(rcard)
+        self._search(rcard,self.ts_out)
+        self._write(self.ts_out,
+                     "  Run a diagnostic from the left panel to see the output here. "
+                     "Errors are shown in red so problems stand out.\n","div")
 
 
     # ═════════════════════════════════════════════════════════════════════════
     # TAB 4 — BACKUP & RESTORE
     # ═════════════════════════════════════════════════════════════════════════
     def _tab_backup(self):
-        f=ttk.Frame(self.nb); self.nb.add(f,text="  💾  Backup  ")
-        left=ttk.Frame(f,padding=(14,12,8,12),width=330)
-        left.pack(side=LEFT,fill=Y); left.pack_propagate(False)
-        self._shdr(left,"BACKUP & RESTORE")
+        f=ttk.Frame(self.nb,padding=(10,8)); self.nb.add(f,text="  💾  Backup  ")
 
-        ttk.Label(left,text="Backup Type",font=(FONT_MONO,8,"bold"),
+        self._mk_context_bar(f).pack(fill=X, pady=(0,8))
+
+        body=ttk.Frame(f); body.pack(fill=BOTH,expand=True)
+
+        left=ttk.Frame(body,padding=(0,0,6,0),width=340)
+        left.pack(side=LEFT,fill=Y); left.pack_propagate(False)
+
+        card=ttk.Frame(left,bootstyle="dark",padding=(12,10)); card.pack(fill=X,pady=(0,8))
+        ttk.Label(card,text="BACKUP OPTIONS",font=(FONT_MONO,9,"bold"),
+                  bootstyle="light").pack(anchor=W,pady=(0,6))
+        ttk.Label(card,text="Backup Type",font=(FONT_MONO,8,"bold"),
                   bootstyle="secondary").pack(anchor=W,pady=(0,4))
         self.bak_type=tk.StringVar(value="running")
-        tr=ttk.Frame(left); tr.pack(anchor=W,pady=(0,8))
+        tr=ttk.Frame(card); tr.pack(anchor=W,pady=(0,8))
         for t in ["running","startup"]:
             ttk.Radiobutton(tr,text=t.capitalize()+" Config",variable=self.bak_type,
                             value=t,bootstyle="primary").pack(side=LEFT,padx=8)
 
         for t,c,bs,h in [
-            ("📥 Pull & Save Config",    self._bak_pull,      "success",        "Pull config and save to file"),
-            ("📤 Restore Config…",       self._restore_cfg,   "warning-outline","Push a saved config file to device"),
-            ("📂 Open Backup Folder",    self._open_bakfolder,"info-outline",   "Open backup folder in Explorer"),
-            ("🔄 Batch Backup All Devs", self._batch_bak_all, "secondary-outline","Backup all devices at once"),
+            ("📥 Backup This Device",    self._bak_pull,      "success",        "Pull config from the target device and save it to disk"),
+            ("📤 Restore Config…",       self._restore_cfg,   "warning-outline","Push a saved config file back to the device"),
+            ("📂 Open Backup Folder",    self._open_bakfolder,"info-outline",   "Open the backup folder in your file browser"),
+            ("🔄 Backup All Devices",    self._batch_bak_all, "secondary-outline","Backup every configured device, one after another"),
         ]:
-            b=ttk.Button(left,text=t,command=c,bootstyle=bs)
+            b=ttk.Button(card,text=t,command=c,bootstyle=bs)
             b.pack(fill=X,pady=3,padx=2); tip(b,h)
+        ttk.Button(card,text="⏰ Schedule Backups…",command=self._sched_dlg,
+                   bootstyle="info-outline").pack(fill=X,pady=(6,2),padx=2)
 
-        ttk.Separator(left,orient=HORIZONTAL).pack(fill=X,pady=(10,8))
-        self._shdr(left,"BACKUP HISTORY")
-        lbf=ttk.Frame(left); lbf.pack(fill=BOTH,expand=True)
+        hcard=ttk.Frame(left,bootstyle="dark",padding=(12,10)); hcard.pack(fill=BOTH,expand=True)
+        hh=ttk.Frame(hcard); hh.pack(fill=X)
+        ttk.Label(hh,text="BACKUP HISTORY",font=(FONT_MONO,9,"bold"),
+                  bootstyle="light").pack(side=LEFT)
+        ttk.Button(hh,text="🔄",width=3,command=self._ref_baklist,
+                   bootstyle="secondary-outline").pack(side=RIGHT)
+        lbf=ttk.Frame(hcard); lbf.pack(fill=BOTH,expand=True,pady=(6,0))
         self.bak_lb=tk.Listbox(lbf,font=(FONT_MONO,8),bg=TERM_BG,fg=TERM_TEXT,
                                selectbackground=TERM_PUR,selectforeground="#000",
-                               relief="flat",bd=0,activestyle="none")
+                               relief="flat",bd=0,activestyle="none",highlightthickness=0)
         lbs=ttk.Scrollbar(lbf,orient=VERTICAL,command=self.bak_lb.yview,bootstyle="secondary-round")
         self.bak_lb.configure(yscrollcommand=lbs.set)
         self.bak_lb.pack(side=LEFT,fill=BOTH,expand=True); lbs.pack(side=RIGHT,fill=Y)
         self.bak_lb.bind("<<ListboxSelect>>",self._bak_preview)
+        tip(self.bak_lb,"Click a backup to preview its contents on the right")
 
-        # Schedule backup button
-        ttk.Button(left,text="⏰ Schedule Backups…",command=self._sched_dlg,
-                   bootstyle="info-outline").pack(fill=X,pady=(6,2),padx=2)
-        ttk.Button(left,text="🔄 Refresh List",command=self._ref_baklist,
-                   bootstyle="secondary-outline").pack(fill=X,pady=2,padx=2)
-
-        ttk.Separator(f,orient=VERTICAL).pack(side=LEFT,fill=Y,padx=4)
-        r=ttk.Frame(f,padding=(8,12)); r.pack(side=LEFT,fill=BOTH,expand=True)
-        self._hdr(r,"CONFIG PREVIEW")
-        self.bak_out=self._mkbox(r)
-        self._search(r,self.bak_out)
+        r=ttk.Frame(body,padding=(6,0,0,0)); r.pack(side=LEFT,fill=BOTH,expand=True)
+        rcard=ttk.Frame(r,bootstyle="dark",padding=(12,10)); rcard.pack(fill=BOTH,expand=True)
+        self._shdr(rcard,"CONFIG PREVIEW")
+        self.bak_out=self._mkbox(rcard)
+        self._search(rcard,self.bak_out)
         self._ref_baklist()
+        if self.bak_lb.size() == 0:
+            self._write(self.bak_out,
+                         "  No backups have been created yet.\n\n"
+                         "  Select a device above, then click 📥 Backup This Device "
+                         "to create your first backup.\n","div")
 
     # ═════════════════════════════════════════════════════════════════════════
     # TAB 5 — CONFIG DIFF
     # ═════════════════════════════════════════════════════════════════════════
     def _tab_diff(self):
-        f=ttk.Frame(self.nb); self.nb.add(f,text="  ⚖️   Diff  ")
-        top=ttk.Frame(f,padding=(12,10)); top.pack(fill=X)
-        self._shdr(top,"CONFIG DIFF — Compare Two Configs")
+        f=ttk.Frame(self.nb,padding=(10,8)); self.nb.add(f,text="  ⚖️   Diff  ")
+
+        self._mk_context_bar(f).pack(fill=X, pady=(0,8))
+
+        top=ttk.Frame(f,bootstyle="dark",padding=(12,10)); top.pack(fill=X,pady=(0,8))
+        ttk.Label(top,text="COMPARE CONFIGURATIONS",font=(FONT_MONO,9,"bold"),
+                  bootstyle="light").pack(anchor=W)
+        ttk.Label(top,text="Load or pull two configs (A and B), then run the comparison.",
+                  font=(FONT_MONO,7),bootstyle="secondary").pack(anchor=W,pady=(2,8))
         bf=ttk.Frame(top); bf.pack(fill=X,pady=(0,6))
         for t,c,bs in [
             ("📥 Load File → A",          lambda:self._diff_loadfile("A"), "info-outline"),
             ("📡 Pull Running → A",        lambda:self._diff_pull("A","running"),"info"),
             ("📡 Pull Startup → B",        lambda:self._diff_pull("B","startup"),"secondary"),
             ("📥 Load File → B",          lambda:self._diff_loadfile("B"),"secondary-outline"),
-            ("⚖️  Run Diff",              self._run_diff,                  "warning"),
+            ("⚖️  Compare Configurations", self._run_diff,                  "warning"),
         ]:
             ttk.Button(bf,text=t,command=c,bootstyle=bs).pack(side=LEFT,padx=4)
-        self.diff_a_lbl=ttk.Label(top,text="A: not loaded",font=(FONT_MONO,8),bootstyle="info")
-        self.diff_a_lbl.pack(anchor=W)
-        self.diff_b_lbl=ttk.Label(top,text="B: not loaded",font=(FONT_MONO,8),bootstyle="secondary")
-        self.diff_b_lbl.pack(anchor=W)
-        ttk.Separator(f,orient=HORIZONTAL).pack(fill=X)
-        self._hdr(f,"DIFF  ( + added   − removed )")
-        self.diff_out=self._mkbox(f)
+        status=ttk.Frame(top); status.pack(fill=X,pady=(2,0))
+        self.diff_a_lbl=ttk.Label(status,text="A: not loaded",font=(FONT_MONO,8),bootstyle="info")
+        self.diff_a_lbl.pack(side=LEFT,padx=(0,16))
+        self.diff_b_lbl=ttk.Label(status,text="B: not loaded",font=(FONT_MONO,8),bootstyle="secondary")
+        self.diff_b_lbl.pack(side=LEFT)
+
+        ocard=ttk.Frame(f,bootstyle="dark",padding=(12,10)); ocard.pack(fill=BOTH,expand=True)
+        oh=ttk.Frame(ocard); oh.pack(fill=X,pady=(0,4))
+        ttk.Label(oh,text="DIFFERENCES",font=(FONT_MONO,9,"bold"),bootstyle="light").pack(side=LEFT)
+        ttk.Label(oh,text="  + added",font=(FONT_MONO,8),bootstyle="success").pack(side=LEFT,padx=(12,0))
+        ttk.Label(oh,text="  − removed",font=(FONT_MONO,8),bootstyle="danger").pack(side=LEFT,padx=(8,0))
+        self.diff_out=self._mkbox(ocard)
         self.diff_out.configure(state="normal")
         self.diff_out.tag_config("add",foreground=TERM_GRN)
         self.diff_out.tag_config("rem",foreground=TERM_RED)
         self.diff_out.configure(state="disabled")
-        self._search(f,self.diff_out)
+        self._search(ocard,self.diff_out)
+        self._write(self.diff_out,
+                     "  Load or pull configuration A and B above, then click "
+                     "⚖️ Compare Configurations to see what changed.\n","div")
 
     # ═════════════════════════════════════════════════════════════════════════
     # TAB 6 — MONITORING
     # ═════════════════════════════════════════════════════════════════════════
     def _tab_monitoring(self):
-        f=ttk.Frame(self.nb,padding=(12,10)); self.nb.add(f,text="  📊  Monitoring  ")
-        self._shdr(f,"REAL-TIME MONITORING")
-        qc=ttk.Frame(f); qc.pack(fill=X,pady=4)
-        ttk.Label(qc,text=" Quick Status ",font=(FONT_MONO,9,"bold"),bootstyle="primary").pack(anchor=W)
-        ttk.Separator(qc,orient=HORIZONTAL).pack(fill=X,pady=(2,6))
-        qi=ttk.Frame(qc); qi.pack(fill=X,padx=10)
+        f=ttk.Frame(self.nb,padding=(10,8)); self.nb.add(f,text="  📊  Monitoring  ")
+
+        self._mk_context_bar(f).pack(fill=X, pady=(0,8))
+
+        qc=ttk.Frame(f,bootstyle="dark",padding=(12,10)); qc.pack(fill=X,pady=(0,8))
+        ttk.Label(qc,text="QUICK STATUS",font=(FONT_MONO,9,"bold"),bootstyle="light").pack(anchor=W,pady=(0,6))
+        qi=ttk.Frame(qc); qi.pack(fill=X)
         for cmd,lbl,h in [("show version","Uptime","Uptime and version"),
                            ("show ip interface brief","Interfaces","Interface summary"),
                            ("show processes cpu","CPU","CPU usage"),
@@ -1374,132 +1936,283 @@ class App:
             b=ttk.Button(qi,text=lbl,command=lambda c=cmd:self._run_mon(c),bootstyle="secondary-outline")
             b.pack(side=LEFT,padx=3); tip(b,h)
 
-        hr=ttk.Frame(f); hr.pack(fill=X,pady=(4,0))
-        ttk.Button(hr,text="❤  Health Check",command=self._health_check,
+        dc=ttk.Frame(f,bootstyle="dark",padding=(12,10)); dc.pack(fill=X,pady=(0,8))
+        ttk.Label(dc,text="DIAGNOSTICS",font=(FONT_MONO,9,"bold"),bootstyle="light").pack(anchor=W,pady=(0,6))
+        hr=ttk.Frame(dc); hr.pack(fill=X)
+        ttk.Button(hr,text="❤  Run Health Check",command=self._health_check,
                    bootstyle="danger-outline",width=20).pack(side=LEFT,padx=2)
         ttk.Button(hr,text="▶▶ Run All Show",command=self._run_all_show,
                    bootstyle="warning-outline",width=20).pack(side=LEFT,padx=2)
         ttk.Button(hr,text="📋 Collect Inventory",command=self._collect_inv,
                    bootstyle="info-outline",width=20).pack(side=LEFT,padx=2)
 
-        ar=ttk.Frame(f); ar.pack(fill=X,pady=6)
+        ac=ttk.Frame(f,bootstyle="dark",padding=(12,10)); ac.pack(fill=X,pady=(0,8))
+        ttk.Label(ac,text="AUTO-REFRESH",font=(FONT_MONO,9,"bold"),bootstyle="light").pack(anchor=W,pady=(0,6))
+        ar=ttk.Frame(ac); ar.pack(fill=X)
         self.ar_var=tk.BooleanVar(value=False)
-        ttk.Checkbutton(ar,text="Auto-refresh every",variable=self.ar_var,
+        ttk.Checkbutton(ar,text="Enabled — every",variable=self.ar_var,
                         command=self._toggle_ar,bootstyle="primary").pack(side=LEFT)
         self.ar_int=ttk.Spinbox(ar,from_=5,to=600,width=5,font=(FONT_MONO,9))
         self.ar_int.set(30); self.ar_int.pack(side=LEFT,padx=4)
-        ttk.Label(ar,text="sec  Command:",font=(FONT_MONO,9),bootstyle="secondary").pack(side=LEFT,padx=4)
+        ttk.Label(ar,text="sec  ·  Command:",font=(FONT_MONO,9),bootstyle="secondary").pack(side=LEFT,padx=4)
         self.ar_cmd=tk.StringVar(value="show ip interface brief")
         ttk.Entry(ar,textvariable=self.ar_cmd,font=(FONT_MONO,9),width=34).pack(side=LEFT,padx=4,ipady=2)
 
-        ttk.Separator(f,orient=HORIZONTAL).pack(fill=X,pady=(6,6))
-        self._hdr(f,"OUTPUT")
-        self.mon_out=self._mkbox(f)
-        self._search(f,self.mon_out)
+        ocard=ttk.Frame(f,bootstyle="dark",padding=(12,10)); ocard.pack(fill=BOTH,expand=True)
+        self._shdr(ocard,"OUTPUT")
+        self.mon_out=self._mkbox(ocard)
+        self._search(ocard,self.mon_out)
+        self._write(self.mon_out,
+                     "  Pick a Quick Status item or Diagnostic above, or enable "
+                     "Auto-Refresh, to see live results here.\n","div")
 
     # ═════════════════════════════════════════════════════════════════════════
     # TAB 7 — MULTI-DEVICE
     # ═════════════════════════════════════════════════════════════════════════
     def _tab_multi(self):
-        f=ttk.Frame(self.nb); self.nb.add(f,text="  🌐  Multi-Device  ")
-        left=ttk.Frame(f,padding=(14,12,8,12),width=380)
-        left.pack(side=LEFT,fill=Y); left.pack_propagate(False)
-        self._shdr(left,"MULTI-DEVICE BATCH OPERATIONS")
+        f=ttk.Frame(self.nb,padding=(10,8)); self.nb.add(f,text="  🌐  Multi-Device  ")
 
-        ttk.Label(left,text="Select Devices (Ctrl+Click for multiple):",
-                  font=(FONT_MONO,8,"bold"),bootstyle="secondary").pack(anchor=W,pady=(0,4))
-        lbf=ttk.Frame(left); lbf.pack(fill=X,pady=(0,6))
+        top=ttk.Frame(f,bootstyle="dark",padding=(10,6)); top.pack(fill=X,pady=(0,8))
+        ttk.Label(top,text="🌐  Batch operations run against multiple devices at once — "
+                            "each device opens its own SSH connection.",
+                  font=(FONT_MONO,8),bootstyle="secondary").pack(anchor=W)
+
+        body=ttk.Frame(f); body.pack(fill=BOTH,expand=True)
+
+        left=ttk.Frame(body,padding=(0,0,6,0),width=380)
+        left.pack(side=LEFT,fill=Y); left.pack_propagate(False)
+
+        c1=ttk.Frame(left,bootstyle="dark",padding=(12,10)); c1.pack(fill=X,pady=(0,8))
+        h1=ttk.Frame(c1); h1.pack(fill=X)
+        ttk.Label(h1,text="1 · SELECT DEVICES",font=(FONT_MONO,9,"bold"),
+                  bootstyle="light").pack(side=LEFT)
+        self.multi_sel_lbl=ttk.Label(h1,text="0 selected",font=(FONT_MONO,8),bootstyle="secondary")
+        self.multi_sel_lbl.pack(side=RIGHT)
+        ttk.Label(c1,text="Ctrl+Click (or Shift+Click) to select more than one.",
+                  font=(FONT_MONO,7),bootstyle="secondary").pack(anchor=W,pady=(2,6))
+        lbf=ttk.Frame(c1); lbf.pack(fill=X,pady=(0,6))
         self.multi_lb=tk.Listbox(lbf,font=(FONT_MONO,9),bg=TERM_BG,fg=TERM_TEXT,
                                   selectbackground=TERM_PUR,selectforeground="#000",
-                                  relief="flat",bd=0,activestyle="none",
+                                  relief="flat",bd=0,activestyle="none",highlightthickness=0,
                                   selectmode=tk.MULTIPLE,height=8)
         lbs2=ttk.Scrollbar(lbf,orient=VERTICAL,command=self.multi_lb.yview,bootstyle="secondary-round")
         self.multi_lb.configure(yscrollcommand=lbs2.set)
         self.multi_lb.pack(side=LEFT,fill=X,expand=True); lbs2.pack(side=RIGHT,fill=Y)
-        sa=ttk.Frame(left); sa.pack(anchor=W,pady=(0,8))
-        ttk.Button(sa,text="Select All",command=lambda:self.multi_lb.select_set(0,"end"),
+        self.multi_lb.bind("<<ListboxSelect>>", self._multi_update_selcount)
+        sa=ttk.Frame(c1); sa.pack(anchor=W)
+        ttk.Button(sa,text="Select All",
+                   command=lambda:(self.multi_lb.select_set(0,"end"),self._multi_update_selcount()),
                    bootstyle="secondary-outline",width=12).pack(side=LEFT,padx=(0,4))
-        ttk.Button(sa,text="Clear",command=lambda:self.multi_lb.selection_clear(0,"end"),
+        ttk.Button(sa,text="Clear",
+                   command=lambda:(self.multi_lb.selection_clear(0,"end"),self._multi_update_selcount()),
                    bootstyle="secondary-outline",width=12).pack(side=LEFT)
 
-        ttk.Separator(left,orient=HORIZONTAL).pack(fill=X,pady=(4,8))
-        ttk.Label(left,text="Operation",font=(FONT_MONO,8,"bold"),
-                  bootstyle="secondary").pack(anchor=W,pady=(0,4))
+        c2=ttk.Frame(left,bootstyle="dark",padding=(12,10)); c2.pack(fill=X,pady=(0,8))
+        ttk.Label(c2,text="2 · CHOOSE OPERATION",font=(FONT_MONO,9,"bold"),
+                  bootstyle="light").pack(anchor=W,pady=(0,6))
         self.multi_op=tk.StringVar(value="Run Command")
-        for op in ["Run Command","Push Config","Collect Inventory","Backup All"]:
-            ttk.Radiobutton(left,text=op,variable=self.multi_op,value=op,
-                            bootstyle="primary").pack(anchor=W,pady=2)
+        for op,desc in [("Run Command","Send one or more CLI commands to every selected device"),
+                         ("Push Config","Send configuration-mode lines to every selected device"),
+                         ("Collect Inventory","Gather version / interfaces / VLANs from each device"),
+                         ("Backup All","Save each device's running-config to disk")]:
+            row=ttk.Frame(c2); row.pack(anchor=W,fill=X,pady=1)
+            ttk.Radiobutton(row,text=op,variable=self.multi_op,value=op,
+                            command=self._multi_op_changed,bootstyle="primary").pack(anchor=W)
+            ttk.Label(row,text="    "+desc,font=(FONT_MONO,7),
+                      bootstyle="secondary").pack(anchor=W)
 
-        ttk.Label(left,text="Command / Config Lines:",font=(FONT_MONO,8,"bold"),
-                  bootstyle="secondary").pack(anchor=W,pady=(8,4))
-        self.multi_cmd=tk.Text(left,height=5,font=(FONT_MONO,9),bg=TERM_BG,fg=TERM_TEXT,
+        c3=ttk.Frame(left,bootstyle="dark",padding=(12,10)); c3.pack(fill=X,pady=(0,8))
+        self.multi_cmd_lbl=ttk.Label(c3,text="3 · COMMAND / CONFIG LINES",
+                                      font=(FONT_MONO,9,"bold"),bootstyle="light")
+        self.multi_cmd_lbl.pack(anchor=W,pady=(0,6))
+        self.multi_cmd=tk.Text(c3,height=5,font=(FONT_MONO,9),bg=TERM_BG,fg=TERM_TEXT,
                                insertbackground=TERM_TEXT,relief="flat",bd=0,padx=6,pady=4)
         self.multi_cmd.insert("1.0","show ip interface brief")
-        self.multi_cmd.pack(fill=X,pady=(0,8))
+        self.multi_cmd.pack(fill=X)
 
-        ttk.Label(left,text="⚠  Each device opens its own SSH connection.",
+        ttk.Label(left,text="⚠  Push Config and Run Command act directly on live devices.",
                   font=(FONT_MONO,7),bootstyle="warning").pack(anchor=W,pady=(0,6))
-        ttk.Button(left,text="▶▶ Execute on Selected Devices",
+        ttk.Button(left,text="▶▶ Run on Selected Devices",
                    command=self._run_multi,bootstyle="warning").pack(fill=X,pady=3,padx=2)
 
-        ttk.Separator(f,orient=VERTICAL).pack(side=LEFT,fill=Y,padx=4)
-        r=ttk.Frame(f,padding=(8,12)); r.pack(side=LEFT,fill=BOTH,expand=True)
-        self._hdr(r,"BATCH OUTPUT")
-        self.multi_out=self._mkbox(r)
-        self._search(r,self.multi_out)
+        r=ttk.Frame(body,padding=(6,0,0,0)); r.pack(side=LEFT,fill=BOTH,expand=True)
+        rcard=ttk.Frame(r,bootstyle="dark",padding=(12,10)); rcard.pack(fill=BOTH,expand=True)
+        self._shdr(rcard,"4 · RESULTS  (per device)")
+        self.multi_out=self._mkbox(rcard)
+        self._search(rcard,self.multi_out)
+        self._write(self.multi_out,
+                     "  Select devices and an operation on the left, then click "
+                     "▶▶ Run on Selected Devices. Each device's result appears here "
+                     "as it completes.\n","div")
         self._ref_multi()
+        self._multi_update_selcount()
+        self._multi_op_changed()
+
+    def _multi_update_selcount(self, _=None):
+        if hasattr(self, "multi_sel_lbl"):
+            n = len(self.multi_lb.curselection())
+            self.multi_sel_lbl.config(text=f"{n} selected")
+
+    def _multi_op_changed(self, _=None):
+        """Purely visual: greys out the command box and relabels it when the
+        selected operation doesn't use it. Does not touch _run_multi/_multi_worker."""
+        if not hasattr(self, "multi_op"):
+            return
+        op = self.multi_op.get()
+        uses_text = op in ("Run Command", "Push Config")
+        if hasattr(self, "multi_cmd_lbl"):
+            suffix = "Command Lines" if op == "Run Command" else \
+                     "Config Lines" if op == "Push Config" else \
+                     "(not used for this operation)"
+            self.multi_cmd_lbl.config(text=f"3 · {suffix.upper()}" if uses_text else
+                                       "3 · COMMAND / CONFIG LINES — not used for this operation")
+        if hasattr(self, "multi_cmd"):
+            self.multi_cmd.configure(state="normal" if uses_text else "disabled")
 
     # ═════════════════════════════════════════════════════════════════════════
     # TAB 8 — INVENTORY
     # ═════════════════════════════════════════════════════════════════════════
     def _tab_inventory(self):
-        f=ttk.Frame(self.nb); self.nb.add(f,text="  📋  Inventory  ")
-        left=ttk.Frame(f,padding=(14,12,8,12),width=300)
+        f=ttk.Frame(self.nb,padding=(10,8)); self.nb.add(f,text="  📋  Inventory  ")
+
+        self._mk_context_bar(f).pack(fill=X, pady=(0,8))
+
+        body=ttk.Frame(f); body.pack(fill=BOTH,expand=True)
+
+        left=ttk.Frame(body,padding=(0,0,6,0),width=300)
         left.pack(side=LEFT,fill=Y); left.pack_propagate(False)
-        self._shdr(left,"NETWORK INVENTORY")
-        ttk.Label(left,text="Collects version, interfaces, VLANs,\nARP, MAC table, and CDP neighbors\nfrom the connected device.",
-                  font=(FONT_MONO,8),bootstyle="secondary",justify=LEFT).pack(anchor=W,pady=(0,10))
+        card=ttk.Frame(left,bootstyle="dark",padding=(12,10)); card.pack(fill=BOTH,expand=True)
+        ttk.Label(card,text="COLLECT INVENTORY",font=(FONT_MONO,9,"bold"),
+                  bootstyle="light").pack(anchor=W,pady=(0,6))
+        ttk.Label(card,text="Collects version, interfaces, VLANs, ARP, MAC "
+                             "table, and CDP neighbors — only what the device "
+                             "actually reports.",
+                  font=(FONT_MONO,7),bootstyle="secondary",
+                  wraplength=250,justify=LEFT).pack(anchor=W,pady=(0,10))
         for t,c,bs,h in [
             ("📋 Collect from Current Device",self._collect_inv,"success","Collect inventory from current device"),
             ("🌐 Collect from All Devices",   self._collect_all_inv,"warning","Collect from every device (batch)"),
             ("📤 Export to CSV",             self._exp_inv_csv,"info-outline","Export inventory as CSV"),
-            ("🔄 Clear Report",              lambda:self._clr(self.inv_out),"secondary-outline","Clear output"),
+            ("🔄 Clear Report",              lambda:self._clr(self.inv_out),"secondary-outline","Clear the detailed report"),
         ]:
-            b=ttk.Button(left,text=t,command=c,bootstyle=bs)
+            b=ttk.Button(card,text=t,command=c,bootstyle=bs)
             b.pack(fill=X,pady=3,padx=2); tip(b,h)
         self._inv_data={}
-        ttk.Separator(f,orient=VERTICAL).pack(side=LEFT,fill=Y,padx=4)
-        r=ttk.Frame(f,padding=(8,12)); r.pack(side=LEFT,fill=BOTH,expand=True)
-        self._hdr(r,"INVENTORY REPORT")
-        self.inv_out=self._mkbox(r)
-        self._search(r,self.inv_out)
+
+        r=ttk.Frame(body,padding=(6,0,0,0)); r.pack(side=LEFT,fill=BOTH,expand=True)
+
+        # ── Device summary — only fields ShikaNet actually knows for every
+        #    configured device (no parsed/fabricated hardware detail). ─────
+        scard=ttk.Frame(r,bootstyle="dark",padding=(10,8)); scard.pack(fill=X,pady=(0,8))
+        sh=ttk.Frame(scard); sh.pack(fill=X)
+        ttk.Label(sh,text="DEVICE SUMMARY",font=(FONT_MONO,9,"bold"),
+                  bootstyle="light").pack(side=LEFT)
+        ttk.Button(sh,text="🔄",width=3,command=self._inv_refresh_summary,
+                   bootstyle="secondary-outline").pack(side=RIGHT)
+        tip(sh.winfo_children()[-1],"Refresh the summary table")
+        cols=("host","type","role","status","collected")
+        self.inv_tree=ttk.Treeview(scard,columns=cols,show="tree headings",
+                                    height=6,bootstyle="dark")
+        self.inv_tree.heading("#0",text="Device")
+        self.inv_tree.heading("host",text="Host/IP")
+        self.inv_tree.heading("type",text="Device Type")
+        self.inv_tree.heading("role",text="Role")
+        self.inv_tree.heading("status",text="Status")
+        self.inv_tree.heading("collected",text="Last Collected")
+        self.inv_tree.column("#0",width=140,stretch=True)
+        self.inv_tree.column("host",width=120,stretch=True)
+        self.inv_tree.column("type",width=90,stretch=False)
+        self.inv_tree.column("role",width=80,stretch=False)
+        self.inv_tree.column("status",width=80,stretch=False)
+        self.inv_tree.column("collected",width=140,stretch=False)
+        tsc=ttk.Scrollbar(scard,orient=VERTICAL,command=self.inv_tree.yview,
+                           bootstyle="secondary-round")
+        self.inv_tree.configure(yscrollcommand=tsc.set)
+        self.inv_tree.pack(side=LEFT,fill=X,expand=True,pady=(6,0))
+        tsc.pack(side=RIGHT,fill="y",pady=(6,0))
+        self.inv_tree.bind("<<TreeviewSelect>>", self._inv_tree_select)
+
+        rcard=ttk.Frame(r,bootstyle="dark",padding=(12,10)); rcard.pack(fill=BOTH,expand=True)
+        self._shdr(rcard,"DETAILED REPORT")
+        self.inv_out=self._mkbox(rcard)
+        self._search(rcard,self.inv_out)
+        self._inv_refresh_summary()
+        if not self.devices:
+            self._write(self.inv_out,
+                         "  No devices configured yet.\n\n"
+                         "  Add a device on the Devices tab, then come back here and "
+                         "click 📋 Collect from Current Device.\n","div")
+        else:
+            self._write(self.inv_out,
+                         "  Click a Collect action on the left to gather inventory. "
+                         "Results for each device appear here, and a quick summary "
+                         "appears in the table above.\n","div")
+
+    def _inv_refresh_summary(self):
+        """Repopulates the DEVICE SUMMARY table from self.devices (+ the
+        timestamp of the most recent collection in self._inv_data, if any).
+        Never invents vendor/model info that ShikaNet hasn't collected."""
+        if not hasattr(self, "inv_tree"):
+            return
+        self.inv_tree.delete(*self.inv_tree.get_children())
+        for name, d in self.devices.items():
+            ts = self._inv_data.get(name, {}).get("timestamp", "")
+            collected = ts.split("T")[0] + " " + ts.split("T")[1][:8] if "T" in ts else "—"
+            self.inv_tree.insert("", "end", iid=name, text=name, values=(
+                d.get("host",""), d.get("device_type",""),
+                infer_device_role(name, d), d.get("status","unknown"), collected))
+
+    def _inv_tree_select(self, _=None):
+        sel = self.inv_tree.selection()
+        if not sel:
+            return
+        name = sel[0]
+        if name in self._inv_data:
+            self._clr(self.inv_out)
+            self._render_inv(name, self._inv_data[name])
+        else:
+            self._clr(self.inv_out)
+            self._write(self.inv_out,
+                         f"  No inventory collected for '{name}' yet.\n\n"
+                         f"  Select it as the target device and click 📋 Collect "
+                         f"from Current Device.\n","div")
 
     # ═════════════════════════════════════════════════════════════════════════
     # TAB 9 — AUDIT LOG
     # ═════════════════════════════════════════════════════════════════════════
     def _tab_audit(self):
-        f=ttk.Frame(self.nb); self.nb.add(f,text="  📋  Audit Log  ")
-        top=ttk.Frame(f,padding=(12,10)); top.pack(fill=X)
-        self._shdr(top,"AUDIT LOG — All Changes & Actions")
+        f=ttk.Frame(self.nb,padding=(10,8)); self.nb.add(f,text="  📋  Audit Log  ")
+        top=ttk.Frame(f,bootstyle="dark",padding=(12,10)); top.pack(fill=X,pady=(0,8))
+        ttk.Label(top,text="AUDIT LOG",font=(FONT_MONO,9,"bold"),bootstyle="light").pack(anchor=W)
+        ttk.Label(top,text="A running record of actions taken in ShikaNet — device changes, "
+                            "config pushes, logins, and similar events.",
+                  font=(FONT_MONO,7),bootstyle="secondary",wraplength=600,
+                  justify=LEFT).pack(anchor=W,pady=(2,8))
         bf=ttk.Frame(top); bf.pack(fill=X)
         for t,c,bs in [("🔄 Refresh",self._load_audit,"info-outline"),
                        ("🗑️  Clear",  self._clr_audit,"danger-outline"),
                        ("📤 Export", self._exp_audit, "warning-outline")]:
             ttk.Button(bf,text=t,command=c,bootstyle=bs,width=12).pack(side=LEFT,padx=4)
-        ttk.Separator(f,orient=HORIZONTAL).pack(fill=X)
-        self._hdr(f,"LOG  (newest first)")
-        self.audit_out=self._mkbox(f)
-        self._search(f,self.audit_out)
+
+        rcard=ttk.Frame(f,bootstyle="dark",padding=(12,10)); rcard.pack(fill=BOTH,expand=True)
+        self._shdr(rcard,"LOG  (newest first)")
+        self.audit_out=self._mkbox(rcard)
+        self._search(rcard,self.audit_out)
         self._load_audit()
 
     # ═════════════════════════════════════════════════════════════════════════
     # TAB 10 — EMAIL
     # ═════════════════════════════════════════════════════════════════════════
     def _tab_email(self):
-        f=ttk.Frame(self.nb); self.nb.add(f,text="  📧  Email  ")
-        left=ttk.Frame(f,padding=(16,12,8,12),width=400)
+        f=ttk.Frame(self.nb,padding=(10,8)); self.nb.add(f,text="  📧  Email  ")
+        body=ttk.Frame(f); body.pack(fill=BOTH,expand=True)
+
+        left=ttk.Frame(body,padding=(0,0,6,0),width=380)
         left.pack(side=LEFT,fill=Y); left.pack_propagate(False)
-        self._shdr(left,"SEND SESSION REPORT")
+
+        cfg_card=ttk.Frame(left,bootstyle="dark",padding=(12,10)); cfg_card.pack(fill=X,pady=(0,8))
+        ttk.Label(cfg_card,text="1 · EMAIL CONFIGURATION",font=(FONT_MONO,9,"bold"),
+                  bootstyle="light").pack(anchor=W,pady=(0,6))
         sv=self._email_cfg; self.em_flds={}
         for lbl,key,default,show in [
             ("SMTP Server","smtp",sv.get("smtp","smtp.gmail.com"),""),
@@ -1508,73 +2221,123 @@ class App:
             ("Password",   "pass",sv.get("pass",""),"*"),
             ("To Email",   "to",  sv.get("to",""),""),
         ]:
-            ttk.Label(left,text=lbl,font=(FONT_MONO,8,"bold"),
+            ttk.Label(cfg_card,text=lbl,font=(FONT_MONO,8,"bold"),
                       bootstyle="secondary").pack(anchor=W,pady=(6,0))
-            e=ttk.Entry(left,font=(FONT_MONO,10),show=show)
+            e=ttk.Entry(cfg_card,font=(FONT_MONO,10),show=show)
             if default: e.insert(0,default)
             e.pack(fill=X,pady=(2,2),ipady=4); self.em_flds[key]=e
-        ttk.Label(left,text="Subject",font=(FONT_MONO,8,"bold"),
+        ttk.Label(cfg_card,text="Subject",font=(FONT_MONO,8,"bold"),
                   bootstyle="secondary").pack(anchor=W,pady=(6,0))
-        sr=ttk.Frame(left); sr.pack(fill=X,pady=(2,2))
+        sr=ttk.Frame(cfg_card); sr.pack(fill=X,pady=(2,2))
         self.em_subj=tk.StringVar(value=sv.get("subject","ShikaNet Report"))
         ttk.Entry(sr,textvariable=self.em_subj,font=(FONT_MONO,10)).pack(
             side=LEFT,fill=X,expand=True,ipady=4)
         ttk.Button(sr,text="↺",
                    command=lambda:self.em_subj.set("ShikaNet Report"),
                    bootstyle="secondary-outline",width=3).pack(side=LEFT,padx=(4,0))
-        ttk.Separator(left,orient=HORIZONTAL).pack(fill=X,pady=(12,8))
-        ttk.Label(left,text="ATTACHMENTS",font=(FONT_MONO,8,"bold"),
-                  bootstyle="secondary").pack(anchor=W,pady=(0,4))
+        tip(sr.winfo_children()[-1],"Reset subject to the default")
+        ttk.Label(cfg_card,text="ℹ  Gmail needs an App Password —\n   myaccount.google.com/apppasswords",
+                  font=(FONT_MONO,7),bootstyle="secondary",wraplength=340,justify=LEFT).pack(anchor=W,pady=(8,0))
+
+        att_card=ttk.Frame(left,bootstyle="dark",padding=(12,10)); att_card.pack(fill=X,pady=(0,8))
+        ttk.Label(att_card,text="2 · REPORT ATTACHMENTS",font=(FONT_MONO,9,"bold"),
+                  bootstyle="light").pack(anchor=W,pady=(0,2))
+        ttk.Label(att_card,text="ShikaNet currently sends one thing by email: a session "
+                                 "report. Choose what to attach to it.",
+                  font=(FONT_MONO,7),bootstyle="secondary",wraplength=330,
+                  justify=LEFT).pack(anchor=W,pady=(0,6))
         self.att_log=tk.BooleanVar(value=True)
         self.att_json=tk.BooleanVar(value=True)
-        ttk.Checkbutton(left,text="Session log (TXT)", variable=self.att_log, bootstyle="primary").pack(anchor=W,pady=2)
-        ttk.Checkbutton(left,text="Full report (JSON)",variable=self.att_json,bootstyle="primary").pack(anchor=W,pady=2)
-        ttk.Separator(left,orient=HORIZONTAL).pack(fill=X,pady=(10,8))
-        ttk.Button(left,text="💾  Save Email Settings",command=self._save_em,bootstyle="warning").pack(fill=X,pady=(0,4))
-        ttk.Button(left,text="✉  Send Report",         command=self._send_em,bootstyle="primary").pack(fill=X)
-        ttk.Label(left,text="ℹ  Gmail needs an App Password\n   myaccount.google.com/apppasswords",
-                  font=(FONT_MONO,7),bootstyle="secondary",wraplength=340,justify=LEFT).pack(anchor=W,pady=(8,0))
-        ttk.Separator(f,orient=VERTICAL).pack(side=LEFT,fill=Y,padx=4)
-        r=ttk.Frame(f,padding=(8,12)); r.pack(side=LEFT,fill=BOTH,expand=True)
-        self._hdr(r,"REPORT PREVIEW")
-        self.em_out=self._mkbox(r)
-        ttk.Button(r,text="Generate Session Report",command=self._gen_report,
+        ttk.Checkbutton(att_card,text="Session log (TXT)", variable=self.att_log, bootstyle="primary").pack(anchor=W,pady=2)
+        ttk.Checkbutton(att_card,text="Full report (JSON)",variable=self.att_json,bootstyle="primary").pack(anchor=W,pady=2)
+
+        send_card=ttk.Frame(left,bootstyle="dark",padding=(12,10)); send_card.pack(fill=X)
+        ttk.Label(send_card,text="3 · GENERATE & SEND",font=(FONT_MONO,9,"bold"),
+                  bootstyle="light").pack(anchor=W,pady=(0,6))
+        ttk.Button(send_card,text="💾  Save Email Settings",command=self._save_em,
+                   bootstyle="warning").pack(fill=X,pady=(0,4))
+        ttk.Button(send_card,text="✉  Send Report Now",command=self._send_em,
+                   bootstyle="primary").pack(fill=X)
+        tip(send_card.winfo_children()[-1],
+            "Connects to the SMTP server above and actually sends the email — "
+            "success/failure appears in the preview panel")
+
+        r=ttk.Frame(body,padding=(6,0,0,0)); r.pack(side=LEFT,fill=BOTH,expand=True)
+        rcard=ttk.Frame(r,bootstyle="dark",padding=(12,10)); rcard.pack(fill=BOTH,expand=True)
+        self._shdr(rcard,"REPORT PREVIEW")
+        self.em_out=self._mkbox(rcard)
+        ttk.Button(rcard,text="📄 Generate Session Report Preview",command=self._gen_report,
                    bootstyle="warning-outline").pack(anchor=W,pady=(8,0))
+        self._write(self.em_out,
+                     "  Click 📄 Generate Session Report Preview to see what will be "
+                     "emailed, then ✉ Send Report Now once your SMTP settings above "
+                     "are filled in.\n","div")
 
     # ═════════════════════════════════════════════════════════════════════════
     # TAB 11 — DEVICES
     # ═════════════════════════════════════════════════════════════════════════
     def _tab_devices(self):
         f=ttk.Frame(self.nb); self.nb.add(f,text="  🖥️   Devices  ")
-        left=ttk.Frame(f,padding=(12,10,6,10),width=290)
+
+        left=ttk.Frame(f,padding=(14,12,7,12),width=310)
         left.pack(side=LEFT,fill=Y); left.pack_propagate(False)
-        self._shdr(left,"DEVICE LIST")
-        lbf=ttk.Frame(left); lbf.pack(fill=BOTH,expand=True)
+        card=ttk.Frame(left,bootstyle="dark",padding=(12,10))
+        card.pack(fill=BOTH,expand=True)
+
+        hdr_row=ttk.Frame(card); hdr_row.pack(fill=X)
+        ttk.Label(hdr_row,text="DEVICE LIST",font=(FONT_MONO,9,"bold"),
+                  bootstyle="light").pack(side=LEFT)
+        self.dev_count_lbl=ttk.Label(hdr_row,text="0 devices",font=(FONT_MONO,8),
+                                      bootstyle="secondary")
+        self.dev_count_lbl.pack(side=RIGHT)
+
+        sf=ttk.Frame(card); sf.pack(fill=X,pady=(8,6))
+        ttk.Label(sf,text="🔍",font=(FONT_MONO,9),bootstyle="secondary").pack(side=LEFT,padx=(0,3))
+        self.dev_search_var=tk.StringVar()
+        dse=ttk.Entry(sf,textvariable=self.dev_search_var,font=(FONT_MONO,9))
+        dse.pack(side=LEFT,fill=X,expand=True,ipady=2)
+        dse.bind("<KeyRelease>",lambda e:self._dev_populate_list(self.dev_search_var.get()))
+        tip(dse,"Filter the list by device name or host")
+
+        lbf=ttk.Frame(card); lbf.pack(fill=BOTH,expand=True)
         self.dev_lb=tk.Listbox(lbf,font=(FONT_MONO,9),bg=TERM_BG,fg=TERM_TEXT,
                                selectbackground=TERM_PUR,selectforeground="#000",
-                               relief="flat",bd=0,activestyle="none")
+                               relief="flat",bd=0,activestyle="none",highlightthickness=0)
         lbs=ttk.Scrollbar(lbf,orient=VERTICAL,command=self.dev_lb.yview,bootstyle="secondary-round")
         self.dev_lb.configure(yscrollcommand=lbs.set)
         self.dev_lb.pack(side=LEFT,fill=BOTH,expand=True); lbs.pack(side=RIGHT,fill=Y)
         self.dev_lb.bind("<<ListboxSelect>>",self._dev_sel)
-        ttk.Separator(left,orient=HORIZONTAL).pack(fill=X,pady=8)
-        for t,c,bs,h in [("➕  Add Device",    self._dev_add,   "success",       "Add new device"),
-                          ("✏️   Edit Device",   self._dev_edit,  "info",          "Edit selected"),
-                          ("🗑️  Remove Device",  self._dev_rm,    "danger-outline","Remove selected"),
-                          ("💾  Save Encrypted", self._dev_save,  "warning",       "Encrypt and save")]:
-            b=ttk.Button(left,text=t,command=c,bootstyle=bs)
+        tip(self.dev_lb,"🟢 online   🔴 offline   ⚪ not yet checked")
+
+        ttk.Separator(card,orient=HORIZONTAL).pack(fill=X,pady=8)
+        ttk.Label(card,text="Workflow:  Add Device → fill in details → Test Connection → Save",
+                  font=(FONT_MONO,7),bootstyle="secondary",
+                  wraplength=270,justify=LEFT).pack(anchor=W,pady=(0,6))
+        for t,c,bs,h in [("➕  Add Device",    self._dev_add,   "success",       "Add a new network device"),
+                          ("✏️   Edit Device",   self._dev_edit,  "info",          "Edit the selected device"),
+                          ("🗑️  Remove Device",  self._dev_rm,    "danger-outline","Remove the selected device")]:
+            b=ttk.Button(card,text=t,command=c,bootstyle=bs)
             b.pack(fill=X,pady=3,padx=2); tip(b,h)
-        ttk.Separator(left,orient=HORIZONTAL).pack(fill=X,pady=(6,4))
+
+        ttk.Separator(card,orient=HORIZONTAL).pack(fill=X,pady=(6,4))
+        ttk.Label(card,text="STORAGE & IMPORT",font=(FONT_MONO,8,"bold"),
+                  bootstyle="secondary").pack(anchor=W,pady=(0,4))
+        b_save=ttk.Button(card,text="💾  Save Encrypted",command=self._dev_save,
+                           bootstyle="warning-outline")
+        b_save.pack(fill=X,pady=2,padx=2); tip(b_save,"Encrypt and save the device list to disk")
         _import_fn = getattr(self, "_import_csv", None)
         if _import_fn:
-            b_imp = ttk.Button(left, text="📥 Import CSV/JSON…",
+            b_imp = ttk.Button(card, text="📥 Import CSV/JSON…",
                                command=_import_fn, bootstyle="info-outline")
-            b_imp.pack(fill=X, pady=3, padx=2)
+            b_imp.pack(fill=X, pady=2, padx=2)
             tip(b_imp, "Bulk-import devices from a CSV or JSON file")
+
         ttk.Separator(f,orient=VERTICAL).pack(side=LEFT,fill=Y,padx=4)
-        r=ttk.Frame(f,padding=(12,10)); r.pack(side=LEFT,fill=BOTH,expand=True)
-        self._shdr(r,"DEVICE DETAILS")
-        self.dev_det=self._mkbox(r)
+
+        r=ttk.Frame(f,padding=(10,12)); r.pack(side=LEFT,fill=BOTH,expand=True)
+        rcard=ttk.Frame(r,bootstyle="dark",padding=(14,12)); rcard.pack(fill=BOTH,expand=True)
+        self._shdr(rcard,"DEVICE DETAILS")
+        self.dev_det=self._mkbox(rcard)
         self._dev_refresh()
 
 
@@ -1585,6 +2348,28 @@ class App:
         ttk.Label(p,text=t,font=(FONT_MONO,10,"bold"),bootstyle="primary").pack(anchor=W,pady=(0,8))
     def _hdr(self, p, t):
         ttk.Label(p,text=t,font=(FONT_MONO,8,"bold"),bootstyle="secondary").pack(anchor=W,pady=(0,4))
+
+    def _mk_context_bar(self, parent):
+        """A small 'what device am I working with' bar, shown at the top of
+        device-scoped tabs (Commands, CLI, …). Purely reads the existing
+        self.dev_var — never creates new state, never touches callbacks."""
+        row = ttk.Frame(parent, bootstyle="dark", padding=(10,5))
+        icon = ttk.Label(row, text="🎯", font=(FONT_MONO,9))
+        icon.pack(side=LEFT, padx=(0,6))
+        lbl = ttk.Label(row, text="", font=(FONT_MONO,8,"bold"))
+        lbl.pack(side=LEFT)
+
+        def _update(*_):
+            name = self.dev_var.get() if hasattr(self, "dev_var") else ""
+            if name:
+                lbl.config(text=f"Target device: {name}", bootstyle="info")
+            else:
+                lbl.config(text="No device selected — choose one from the Device dropdown above.",
+                           bootstyle="warning")
+        _update()
+        if hasattr(self, "dev_var"):
+            self.dev_var.trace_add("write", _update)
+        return row
 
     def _ff(self, parent, label, ph):
         ttk.Label(parent,text=label,font=(FONT_MONO,8,"bold"),
@@ -1663,6 +2448,13 @@ class App:
         self._unsaved=False; self.unsaved_lbl.config(text="")
 
     def _set_status(self, on, name=""):
+        # Commands tab index found by stable frame reference — robust even
+        # though Dashboard is inserted at position 0 ahead of it (see
+        # _commands_tab_frame in _tab_commands()). Falls back to 0 only if
+        # that reference is somehow missing.
+        _cmd_idx = self.nb.index_of_frame(getattr(self, "_commands_tab_frame", None))
+        if _cmd_idx is None:
+            _cmd_idx = 0
         if on:
             self.badge.config(text=f"◉  {name}",bootstyle="success")
             self.btn_conn.config(state=DISABLED)
@@ -1672,7 +2464,8 @@ class App:
             self.btn_all.config(state=NORMAL)
             self.btn_hc.config(state=NORMAL)
             self.btn_inv.config(state=NORMAL)
-            self.nb.tab(0,text=f" 📡 {name} ")
+            self.nb.tab(_cmd_idx,text=f" 📡 {name} ")
+            self.nb.set_connection_status(True, f"Connected: {name}")
         else:
             self.badge.config(text="◉  Disconnected",bootstyle="danger")
             self.btn_conn.config(state=NORMAL)
@@ -1684,7 +2477,8 @@ class App:
             self.btn_inv.config(state=DISABLED)
             self.uptime_lbl.config(text="")
             self._t0=None
-            self.nb.tab(0,text="  📡  Commands  ")
+            self.nb.tab(_cmd_idx,text="  📡  Commands  ")
+            self.nb.set_connection_status(False)
 
     def _set_theme(self, t):
         self._theme = t
@@ -2258,6 +3052,14 @@ class App:
         self._write(box,"──────────────────────────────────────\n","div")
 
     def _do_push(self, lines, action, detail=""):
+        preview = "\n".join(lines[:8]) + ("\n…" if len(lines) > 8 else "")
+        if not messagebox.askyesno(
+            "Write Configuration",
+            f"Push {len(lines)} configuration line(s) to '{self.current or self.dev_var.get()}'?\n\n"
+            f"{preview}\n\n"
+            "This writes directly to the device's running configuration."):
+            self._write(self.cfg_out,"\n✘ Configuration push cancelled.\n","wrn")
+            return
         self._write(self.cfg_out,"\n▶ Pushing config…\n","inf")
         self._cliprev(lines,self.cfg_out)
         def work():
@@ -2618,6 +3420,7 @@ class App:
         if hasattr(self,"multi_lb"):
             self.multi_lb.delete(0,"end")
             for n in self.devices: self.multi_lb.insert("end",n)
+            self._multi_update_selcount()
 
     def _run_multi(self):
         sel=self.multi_lb.curselection()
@@ -2628,6 +3431,14 @@ class App:
         if not raw and op in ("Run Command","Push Config"):
             messagebox.showwarning("No Command","Enter a command or config lines."); return
         total = len(names)
+        if op == "Push Config":
+            preview = raw if len(raw) < 400 else raw[:400] + "\n…"
+            if not messagebox.askyesno(
+                "Push Configuration to Multiple Devices",
+                f"Push the following configuration line(s) to {total} device(s)?\n\n"
+                f"{preview}\n\n"
+                "This writes directly to each device's running configuration."):
+                return
         self._write(self.multi_out,
                     f"\n{'─'*14} {op} on {total} device(s) {'─'*14}\n","wrn")
         self._setbar(f"{op}: 0 / {total} devices…")
@@ -2700,7 +3511,7 @@ class App:
             except Exception as e:
                 results[cmd]=f"[ERROR] {e}"
         self._inv_data[dev]=results
-        self.root.after(0,lambda:self._render_inv(dev,results))
+        self.root.after(0,lambda:(self._render_inv(dev,results),self._inv_refresh_summary()))
 
     def _all_inv_worker(self):
         JK={"jump_host","jump_username","jump_password","jump_port","jump_device_type",
@@ -2720,7 +3531,7 @@ class App:
                     except Exception as e: results[cmd]=f"[ERROR] {e}"
                 c.disconnect()
                 self._inv_data[name]=results
-                self.root.after(0,lambda n=name,r=results:self._render_inv(n,r))
+                self.root.after(0,lambda n=name,r=results:(self._render_inv(n,r),self._inv_refresh_summary()))
             except Exception as e:
                 self.root.after(0,lambda n=name,err=str(e):
                     self._write(self.inv_out,f"✘ {n}: {err}\n","err"))
@@ -2765,7 +3576,10 @@ class App:
                 with open(AUDIT_FILE,encoding="utf-8") as f: recs=json.load(f)
             except: pass
         if not recs:
-            self._write(self.audit_out,"No audit records yet.\n","inf"); return
+            self._write(self.audit_out,
+                         "No audit records yet.\n\n"
+                         "Actions like adding a device, pushing configuration, or running a "
+                         "template will appear here automatically.\n","inf"); return
         for r in reversed(recs[-500:]):
             ts=r.get("ts","?"); dev=r.get("device","?")
             act=r.get("action","?"); det=r.get("detail","")
@@ -2854,21 +3668,66 @@ class App:
     # ═════════════════════════════════════════════════════════════════════════
     # DEVICE MANAGER
     # ═════════════════════════════════════════════════════════════════════════
+    def _dev_populate_list(self, filt=""):
+        """(Re)build the device listbox, optionally filtered by name/host,
+        color-coded by last-known online/offline status. Selection still
+        resolves to a real key in self.devices — filtering never changes
+        what gets stored or looked up."""
+        if not hasattr(self, "dev_lb"):
+            return
+        self.dev_lb.delete(0, "end")
+        filt = (filt or "").strip().lower()
+        shown = []
+        for n, d in self.devices.items():
+            if filt and filt not in n.lower() and filt not in str(d.get("host", "")).lower():
+                continue
+            shown.append(n)
+            self.dev_lb.insert("end", n)
+            status = d.get("status")
+            color = TERM_GRN if status == "online" else TERM_RED if status == "offline" else TERM_TEXT
+            self.dev_lb.itemconfig(self.dev_lb.size() - 1, fg=color)
+
+        total = len(self.devices)
+        if hasattr(self, "dev_count_lbl"):
+            if filt and len(shown) != total:
+                self.dev_count_lbl.config(text=f"{len(shown)} of {total} shown")
+            else:
+                self.dev_count_lbl.config(text=f"{total} device{'s' if total != 1 else ''}")
+
+        if not self.devices and hasattr(self, "dev_det"):
+            self._clr(self.dev_det)
+            for txt, tag in [
+                ("\n  No devices configured\n\n", "hdr"),
+                ("  Add your first network device to get started.\n\n", "inf"),
+                ("  ➕  Add Device  →  fill in the details  →  Test Connection  →  Save\n", "ok"),
+            ]:
+                self._write(self.dev_det, txt, tag)
+        elif shown and not self.dev_lb.curselection() and hasattr(self, "dev_det"):
+            # Nothing selected yet but devices exist — make that state obvious
+            # instead of leaving the details panel blank.
+            self._clr(self.dev_det)
+            self._write(self.dev_det, "\n  Select a device on the left to view its details.\n", "div")
+
     def _dev_refresh(self):
-        self.dev_lb.delete(0,"end")
-        for n in self.devices: self.dev_lb.insert("end",n)
+        self._dev_populate_list(self.dev_search_var.get() if hasattr(self, "dev_search_var") else "")
         self.dev_cb.configure(values=list(self.devices.keys()))
         if self.devices and self.dev_var.get() not in self.devices:
             self.dev_var.set(list(self.devices.keys())[0])
         self._ref_multi()
+        if hasattr(self, "inv_tree"):
+            self._inv_refresh_summary()
 
     def _dev_sel(self, _=None):
         sel=self.dev_lb.curselection()
         if not sel: return
         name=self.dev_lb.get(sel[0]); d=self.devices.get(name,{})
         self._clr(self.dev_det)
+        status = d.get("status")
+        status_txt = "🟢 Online" if status == "online" else "🔴 Offline" if status == "offline" else "⚪ Unknown (not yet pinged)"
+        status_tag = "ok" if status == "online" else "err" if status == "offline" else "div"
         for txt,tag in [
             (f"Name        : {name}\n","hdr"),
+            (f"Status      : {status_txt}\n",status_tag),
             (f"Host        : {d.get('host','')}\n","inf"),
             (f"Username    : {d.get('username','')}\n","inf"),
             (f"Password    : {'*'*len(d.get('password',''))}\n","inf"),
@@ -2916,7 +3775,11 @@ class App:
         sel=self.dev_lb.curselection()
         if not sel: messagebox.showinfo("No Selection","Select a device to remove."); return
         name=self.dev_lb.get(sel[0])
-        if messagebox.askyesno("Confirm",f"Remove '{name}'?"):
+        if messagebox.askyesno(
+            "Remove Device",
+            f"Remove '{name}' from your device list?\n\n"
+            f"This only deletes it from ShikaNet's saved device list — it does not "
+            f"change anything on the physical device. This cannot be undone here."):
             del self.devices[name]; self._dev_refresh()
             self._clr(self.dev_det); self._setbar(f"'{name}' removed.")
 
@@ -3384,60 +4247,92 @@ class AppV9(App):
     # TAB — DASHBOARD
     # ══════════════════════════════════════════════════════════════════════
     def _tab_dashboard(self):
-        f = ttk.Frame(self.nb, padding=(14,10))
+        f = ttk.Frame(self.nb, padding=(18,14))
         self.nb.insert(0, f, text="  🏠  Dashboard  ")
 
-        # Top stat cards row
-        cards = ttk.Frame(f); cards.pack(fill=X, pady=(0,10))
+        # ── "Welcome" banner (mirrors the reference screenshot's header) ──
+        top = ttk.Frame(f); top.pack(fill=X, pady=(0,14))
+        hl = ttk.Frame(top); hl.pack(side=LEFT, anchor=W)
+        ttk.Label(hl, text="Welcome 👋", font=(FONT_MONO,18,"bold"),
+                  bootstyle="light").pack(anchor=W)
+        ttk.Label(hl, text="Network Operations Dashboard", font=(FONT_MONO,9),
+                  bootstyle="secondary").pack(anchor=W, pady=(2,0))
+        hr = ttk.Frame(top); hr.pack(side=RIGHT, anchor=E)
+        self._dash_tracking_lbl = ttk.Label(
+            hr, text="Tracking: 0 devices", font=(FONT_MONO,8), bootstyle="secondary")
+        self._dash_tracking_lbl.pack(side=RIGHT, padx=(0,4))
+        ico_settings = ttk.Button(hr, text="⚙", width=3, bootstyle="secondary-outline",
+                                   command=lambda: self.nb.select_by_label("Settings"))
+        ico_settings.pack(side=RIGHT, padx=3); tip(ico_settings, "Open Settings")
+        ico_alerts = ttk.Button(hr, text="🔔", width=3, bootstyle="secondary-outline",
+                                 command=lambda: self.nb.select_by_label("Alerts"))
+        ico_alerts.pack(side=RIGHT, padx=3); tip(ico_alerts, "Open Alerts")
+
+        # Top stat cards row — dark cards, colour lives in the big number
+        # (same visual language as the reference dashboard's RX/Forward/
+        # Up Time/Dropped cards).
+        cards = ttk.Frame(f); cards.pack(fill=X, pady=(0,12))
         self._dash_cards = {}
-        for label, key, bs in [
-            ("Total Devices",  "total",   "primary"),
-            ("Online",         "online",  "success"),
-            ("Offline",        "offline", "danger"),
-            ("Active Alerts",  "alerts",  "warning"),
-            ("Last Backup",    "backup",  "info"),
-            ("Health Score",   "health",  "success"),
-        ]:
-            card = ttk.Frame(cards, bootstyle=bs, padding=(12,8))
+        _card_spec = [
+            ("RX PACKETS",     "total",   "primary",  "Total configured devices"),
+            ("ONLINE",         "online",  "success",  "Devices currently reachable"),
+            ("OFFLINE",        "offline", "danger",   "Devices currently unreachable"),
+            ("ACTIVE ALERTS",  "alerts",  "warning",  "Open alerts across all devices"),
+            ("LAST BACKUP",    "backup",  "info",     "Most recent config backup"),
+            ("HEALTH SCORE",   "health",  "success",  "Online % minus alert penalty"),
+        ]
+        for label, key, bs, hint in _card_spec:
+            card = ttk.Frame(cards, bootstyle="dark", padding=(14,12))
             card.pack(side=LEFT, expand=True, fill=X, padx=4)
-            ttk.Label(card, text=label, font=(FONT_MONO,8), bootstyle=f"{bs}-inverse").pack()
-            val = ttk.Label(card, text="—", font=(FONT_MONO,16,"bold"), bootstyle=f"{bs}-inverse")
-            val.pack()
+            ttk.Label(card, text=label, font=(FONT_MONO,8,"bold"),
+                      bootstyle="secondary").pack(anchor=W)
+            val = ttk.Label(card, text="—", font=(FONT_MONO,20,"bold"), bootstyle=bs)
+            val.pack(anchor=W, pady=(2,0))
             self._dash_cards[key] = val
+            tip(card, hint)
 
-        # Quick actions row
-        qa = ttk.Frame(f); qa.pack(fill=X, pady=(0,10))
-        for txt, cmd, bs in [
-            ("⚡ Connect",         self._connect,          "success"),
-            ("❤  Health Check",   self._health_check,     "danger"),
-            ("💾 Quick Backup",    self._quick_bak,        "info"),
-            ("▶▶ Run All Show",   self._run_all_show,     "warning"),
-            ("🔍 Discover",        lambda: self.nb.select(self.nb.index("end")-10), "secondary"),
-            ("📋 Compliance",      lambda: self.nb.select(self.nb.index("end")-8),  "primary"),
+        # Quick actions row — obvious primary/secondary actions, each wired
+        # to the same real ShikaNet functionality as before.
+        ttk.Label(f, text="QUICK ACTIONS", font=(FONT_MONO,8,"bold"),
+                  bootstyle="secondary").pack(anchor=W, pady=(0,4))
+        qa = ttk.Frame(f); qa.pack(fill=X, pady=(0,12))
+        for txt, cmd, bs, hint in [
+            ("➕ Add Device",      lambda: (self.nb.select_by_label("Devices"), self._dev_add()),
+             "success",  "Add a new network device"),
+            ("⚡ Connect",         self._connect,          "primary",
+             "Connect to the selected device via SSH"),
+            ("❤ Health Check",    self._health_check,     "danger",
+             "Run a health check against the connected device"),
+            ("💾 Quick Backup",    self._quick_bak,        "info",
+             "Back up the connected device's config"),
+            ("🔍 Discover",        lambda: self.nb.select_by_label("Discovery"),
+             "secondary", "Scan a subnet for live devices"),
+            ("🛠 Troubleshoot",    lambda: self.nb.select_by_label("Troubleshoot"),
+             "warning", "Open troubleshooting tools"),
         ]:
-            b = ttk.Button(qa, text=txt, command=cmd, bootstyle=bs, width=18)
-            b.pack(side=LEFT, padx=3)
+            b = ttk.Button(qa, text=txt, command=cmd, bootstyle=bs, width=17)
+            b.pack(side=LEFT, padx=3); tip(b, hint)
 
-        ttk.Separator(f, orient=HORIZONTAL).pack(fill=X, pady=(0,8))
+        ttk.Separator(f, orient=HORIZONTAL).pack(fill=X, pady=(0,10))
 
-        # Two-column layout: live output + alerts
+        # Two-column layout: recent activity + active alerts panels
         cols = ttk.Frame(f); cols.pack(fill=BOTH, expand=True)
 
-        # Left: recent activity
-        lf = ttk.Frame(cols, padding=(0,0,8,0)); lf.pack(side=LEFT, fill=BOTH, expand=True)
-        ttk.Label(lf, text="RECENT ACTIVITY", font=(FONT_MONO,8,"bold"),
-                  bootstyle="secondary").pack(anchor=W, pady=(0,4))
+        lf = ttk.Frame(cols, bootstyle="dark", padding=(12,10,4,10))
+        lf.pack(side=LEFT, fill=BOTH, expand=True, padx=(0,4))
+        ttk.Label(lf, text="RECENT ACTIVITY", font=(FONT_MONO,9,"bold"),
+                  bootstyle="light").pack(anchor=W, pady=(0,6))
         self.dash_activity = self._mkbox(lf)
 
-        # Right: live alerts
-        rf = ttk.Frame(cols, padding=(8,0,0,0), width=320); rf.pack(side=LEFT, fill=Y)
+        rf = ttk.Frame(cols, bootstyle="dark", padding=(12,10,4,10), width=320)
+        rf.pack(side=LEFT, fill=Y, padx=(4,0))
         rf.pack_propagate(False)
-        ttk.Label(rf, text="ACTIVE ALERTS", font=(FONT_MONO,8,"bold"),
-                  bootstyle="warning").pack(anchor=W, pady=(0,4))
+        ttk.Label(rf, text="ACTIVE ALERTS", font=(FONT_MONO,9,"bold"),
+                  bootstyle="warning").pack(anchor=W, pady=(0,6))
         self.dash_alerts_box = self._mkbox(rf)
 
         # Refresh button
-        br = ttk.Frame(f); br.pack(fill=X, pady=(6,0))
+        br = ttk.Frame(f); br.pack(fill=X, pady=(10,0))
         ttk.Button(br, text="🔄 Refresh Dashboard",
                    command=self._refresh_dashboard,
                    bootstyle="secondary-outline").pack(side=LEFT, padx=2)
@@ -3483,6 +4378,12 @@ class AppV9(App):
         self._dash_cards["alerts"].config(text=str(alerts))
         self._dash_cards["backup"].config(text=last_bak)
         self._dash_cards["health"].config(text=f"{health}%")
+
+        if hasattr(self, "_dash_tracking_lbl"):
+            self._dash_tracking_lbl.config(
+                text=f"Tracking: {total} device{'s' if total != 1 else ''}")
+        if hasattr(self, "nb"):
+            self.nb.set_footer_stats(total, online, time.strftime("%H:%M:%S"))
 
         # Refresh alert box
         self._clr(self.dash_alerts_box)
@@ -3531,63 +4432,76 @@ class AppV9(App):
     # TAB — DISCOVERY
     # ══════════════════════════════════════════════════════════════════════
     def _tab_discovery(self):
-        f = ttk.Frame(self.nb); self.nb.add(f, text="  🔍  Discovery  ")
-        left = ttk.Frame(f, padding=(14,12,8,12), width=340)
+        f = ttk.Frame(self.nb, padding=(10,8)); self.nb.add(f, text="  🔍  Discovery  ")
+
+        self._mk_context_bar(f).pack(fill=X, pady=(0,8))
+
+        body = ttk.Frame(f); body.pack(fill=BOTH,expand=True)
+
+        left = ttk.Frame(body, padding=(0,0,6,0), width=360)
         left.pack(side=LEFT, fill=Y); left.pack_propagate(False)
-        self._shdr(left, "NETWORK DISCOVERY")
+        card = ttk.Frame(left, bootstyle="dark", padding=(12,10)); card.pack(fill=BOTH,expand=True)
+        ttk.Label(card, text="DISCOVERY METHOD", font=(FONT_MONO,9,"bold"),
+                  bootstyle="light").pack(anchor=W,pady=(0,8))
 
-        ttk.Label(left, text="IP Range Scan", font=(FONT_MONO,9,"bold"),
-                  bootstyle="info").pack(anchor=W, pady=(0,6))
-        r1 = ttk.Frame(left); r1.pack(fill=X, pady=(0,4))
-        ttk.Label(r1, text="Start IP:", font=(FONT_MONO,8)).pack(side=LEFT)
-        self.disc_start = ttk.Entry(r1, font=(FONT_MONO,10), width=16)
-        self.disc_start.insert(0,"192.168.1.1"); self.disc_start.pack(side=LEFT, padx=6, ipady=2)
-        r2 = ttk.Frame(left); r2.pack(fill=X, pady=(0,8))
-        ttk.Label(r2, text="End IP:  ", font=(FONT_MONO,8)).pack(side=LEFT)
-        self.disc_end = ttk.Entry(r2, font=(FONT_MONO,10), width=16)
-        self.disc_end.insert(0,"192.168.1.254"); self.disc_end.pack(side=LEFT, padx=6, ipady=2)
+        ttk.Label(card, text="1 · IP Range Scan", font=(FONT_MONO,9,"bold"),
+                  bootstyle="info").pack(anchor=W, pady=(0,4))
+        ttk.Label(card, text="Pings every address in the range to find live hosts.",
+                  font=(FONT_MONO,7), bootstyle="secondary").pack(anchor=W,pady=(0,6))
+        r1 = ttk.Frame(card); r1.pack(fill=X, pady=(0,4))
+        ttk.Label(r1, text="Start IP:", font=(FONT_MONO,8),width=9).pack(side=LEFT)
+        self.disc_start = ttk.Entry(r1, font=(FONT_MONO,10))
+        self.disc_start.insert(0,"192.168.1.1"); self.disc_start.pack(side=LEFT,fill=X,expand=True,ipady=2)
+        r2 = ttk.Frame(card); r2.pack(fill=X, pady=(0,8))
+        ttk.Label(r2, text="End IP:", font=(FONT_MONO,8),width=9).pack(side=LEFT)
+        self.disc_end = ttk.Entry(r2, font=(FONT_MONO,10))
+        self.disc_end.insert(0,"192.168.1.254"); self.disc_end.pack(side=LEFT,fill=X,expand=True,ipady=2)
 
-        self.disc_pb = ttk.Progressbar(left, bootstyle="info-striped",
+        self.disc_pb = ttk.Progressbar(card, bootstyle="info-striped",
                                         mode="determinate", maximum=100)
         self.disc_pb.pack(fill=X, pady=(0,6))
-        self.disc_status = ttk.Label(left, text="Ready.", font=(FONT_MONO,8),
+        self.disc_status = ttk.Label(card, text="Ready.", font=(FONT_MONO,8),
                                       bootstyle="secondary")
         self.disc_status.pack(anchor=W, pady=(0,8))
 
-        br = ttk.Frame(left); br.pack(anchor=W, pady=(0,8))
+        br = ttk.Frame(card); br.pack(anchor=W, pady=(0,10))
         ttk.Button(br, text="▶ Start Scan", command=self._start_disc,
                    bootstyle="success", width=14).pack(side=LEFT, padx=(0,4))
         ttk.Button(br, text="■ Stop",       command=lambda: self._scan_stop.set(),
                    bootstyle="danger-outline", width=8).pack(side=LEFT)
 
-        ttk.Separator(left, orient=HORIZONTAL).pack(fill=X, pady=(8,8))
-        ttk.Label(left, text="CDP / LLDP Discovery", font=(FONT_MONO,9,"bold"),
-                  bootstyle="warning").pack(anchor=W, pady=(0,6))
-        ttk.Label(left, text="Requires active connection.",
-                  font=(FONT_MONO,8), bootstyle="secondary").pack(anchor=W, pady=(0,4))
-        ttk.Button(left, text="📡 Discover via CDP",
+        ttk.Separator(card, orient=HORIZONTAL).pack(fill=X, pady=(0,8))
+        ttk.Label(card, text="2 · CDP / LLDP Discovery", font=(FONT_MONO,9,"bold"),
+                  bootstyle="warning").pack(anchor=W, pady=(0,4))
+        ttk.Label(card, text="Requires an active device connection (see the bar above).",
+                  font=(FONT_MONO,7), bootstyle="secondary").pack(anchor=W, pady=(0,4))
+        ttk.Button(card, text="📡 Discover via CDP",
                    command=lambda: self._disc_protocol("cdp"),
                    bootstyle="warning-outline").pack(fill=X, pady=2)
-        ttk.Button(left, text="📡 Discover via LLDP",
+        ttk.Button(card, text="📡 Discover via LLDP",
                    command=lambda: self._disc_protocol("lldp"),
                    bootstyle="secondary-outline").pack(fill=X, pady=2)
 
-        ttk.Separator(left, orient=HORIZONTAL).pack(fill=X, pady=(8,8))
-        ttk.Label(left, text="Import Devices from CSV",
+        ttk.Separator(card, orient=HORIZONTAL).pack(fill=X, pady=(8,8))
+        ttk.Label(card, text="3 · Import from CSV",
                   font=(FONT_MONO,9,"bold"), bootstyle="primary").pack(anchor=W, pady=(0,4))
-        ttk.Button(left, text="📥 Import CSV",
+        ttk.Button(card, text="📥 Import CSV",
                    command=self._import_csv,
                    bootstyle="primary").pack(fill=X, pady=2)
-        ttk.Label(left, text="CSV columns: name,host,username,password,\ndevice_type,port",
+        ttk.Label(card, text="Columns expected: name, host, username, password,\ndevice_type, port",
                   font=(FONT_MONO,7), bootstyle="secondary").pack(anchor=W, pady=(4,0))
 
-        ttk.Separator(f, orient=VERTICAL).pack(side=LEFT, fill=Y, padx=4)
-        r = ttk.Frame(f, padding=(8,12)); r.pack(side=LEFT, fill=BOTH, expand=True)
-        self._hdr(r, "DISCOVERED DEVICES")
-        self.disc_out = self._mkbox(r)
-        self._search(r, self.disc_out)
+        r = ttk.Frame(body, padding=(6,0,0,0)); r.pack(side=LEFT, fill=BOTH, expand=True)
+        rcard = ttk.Frame(r, bootstyle="dark", padding=(12,10)); rcard.pack(fill=BOTH,expand=True)
+        self._shdr(rcard, "DISCOVERED DEVICES")
+        self.disc_out = self._mkbox(rcard)
+        self._search(rcard, self.disc_out)
+        self._write(self.disc_out,
+                     "  Choose a discovery method on the left. Results appear here as "
+                     "they're found — nothing is added to your device list until you "
+                     "review it and click ✔ below.\n","div")
 
-        ttk.Button(r, text="✔ Add All Discovered to Devices",
+        ttk.Button(rcard, text="✔ Review & Add All Discovered to Devices",
                    command=self._add_discovered,
                    bootstyle="success-outline").pack(anchor=W, pady=(6,0))
         self._discovered_hosts = []
@@ -3728,38 +4642,46 @@ class AppV9(App):
     # TAB — COMMAND TEMPLATES
     # ══════════════════════════════════════════════════════════════════════
     def _tab_templates(self):
-        f = ttk.Frame(self.nb); self.nb.add(f, text="  📄  Templates  ")
-        left = ttk.Frame(f, padding=(14,12,8,12), width=320)
-        left.pack(side=LEFT, fill=Y); left.pack_propagate(False)
-        self._shdr(left, "COMMAND TEMPLATES")
+        f = ttk.Frame(self.nb,padding=(10,8)); self.nb.add(f, text="  📄  Templates  ")
 
-        ttk.Label(left, text="Templates:", font=(FONT_MONO,8,"bold"),
-                  bootstyle="secondary").pack(anchor=W, pady=(0,4))
-        lbf = ttk.Frame(left); lbf.pack(fill=BOTH, expand=True)
+        self._mk_context_bar(f).pack(fill=X, pady=(0,8))
+
+        body = ttk.Frame(f); body.pack(fill=BOTH,expand=True)
+        left = ttk.Frame(body, padding=(0,0,6,0), width=320)
+        left.pack(side=LEFT, fill=Y); left.pack_propagate(False)
+        card = ttk.Frame(left,bootstyle="dark",padding=(12,10)); card.pack(fill=BOTH,expand=True)
+        ttk.Label(card,text="TEMPLATE LIBRARY",font=(FONT_MONO,9,"bold"),
+                  bootstyle="light").pack(anchor=W,pady=(0,6))
+        lbf = ttk.Frame(card); lbf.pack(fill=BOTH, expand=True)
         self.tpl_lb = tk.Listbox(lbf, font=(FONT_MONO,9), bg=TERM_BG, fg=TERM_TEXT,
                                   selectbackground=TERM_PUR, selectforeground="#000",
-                                  relief="flat", bd=0, activestyle="none")
+                                  relief="flat", bd=0, activestyle="none",highlightthickness=0)
         lbs = ttk.Scrollbar(lbf, orient=VERTICAL, command=self.tpl_lb.yview,
                              bootstyle="secondary-round")
         self.tpl_lb.configure(yscrollcommand=lbs.set)
         self.tpl_lb.pack(side=LEFT, fill=BOTH, expand=True); lbs.pack(side=RIGHT, fill=Y)
         self.tpl_lb.bind("<<ListboxSelect>>", self._tpl_select)
+        tip(self.tpl_lb, "Selecting a template only loads it into the editor — it does not run anything")
 
-        br = ttk.Frame(left); br.pack(fill=X, pady=(8,0))
+        br = ttk.Frame(card); br.pack(fill=X, pady=(8,0))
         for t,c,bs in [("➕ New",   self._tpl_new,    "success"),
-                        ("🗑️ Delete",self._tpl_delete, "danger-outline"),
-                        ("▶ Run",   self._tpl_run,    "warning")]:
+                        ("🗑️ Delete",self._tpl_delete, "danger-outline")]:
             ttk.Button(br, text=t, command=c, bootstyle=bs).pack(side=LEFT, padx=2)
 
         # Seed built-in templates
         self._seed_templates()
         self._tpl_refresh()
 
-        ttk.Separator(f, orient=VERTICAL).pack(side=LEFT, fill=Y, padx=4)
-        r = ttk.Frame(f, padding=(8,12)); r.pack(side=LEFT, fill=BOTH, expand=True)
-        self._hdr(r, "TEMPLATE EDITOR")
+        r = ttk.Frame(body, padding=(6,0,0,0)); r.pack(side=LEFT, fill=BOTH, expand=True)
+        rcard=ttk.Frame(r,bootstyle="dark",padding=(12,10)); rcard.pack(fill=BOTH,expand=True)
+        ttk.Label(rcard,text="TEMPLATE EDITOR",font=(FONT_MONO,9,"bold"),
+                  bootstyle="light").pack(anchor=W,pady=(0,2))
+        ttk.Label(rcard,text="Editing here only changes the saved template — it never runs "
+                              "commands. Use ▶ Run Template below to push it to the target device.",
+                  font=(FONT_MONO,7),bootstyle="secondary",wraplength=600,
+                  justify=LEFT).pack(anchor=W,pady=(0,8))
 
-        meta = ttk.Frame(r); meta.pack(fill=X, pady=(0,6))
+        meta = ttk.Frame(rcard); meta.pack(fill=X, pady=(0,6))
         ttk.Label(meta, text="Name:", font=(FONT_MONO,8,"bold")).pack(side=LEFT)
         self.tpl_name = ttk.Entry(meta, font=(FONT_MONO,10), width=20)
         self.tpl_name.pack(side=LEFT, padx=6, ipady=3)
@@ -3767,14 +4689,21 @@ class AppV9(App):
         self.tpl_cat = ttk.Entry(meta, font=(FONT_MONO,10), width=14)
         self.tpl_cat.pack(side=LEFT, padx=6, ipady=3)
 
-        self._hdr(r, "Commands (one per line, use {variable} for placeholders):")
-        self.tpl_body = tk.Text(r, height=12, font=(FONT_MONO,10),
+        self._hdr(rcard, "Commands (one per line, use {variable} for placeholders):")
+        self.tpl_body = tk.Text(rcard, height=12, font=(FONT_MONO,10),
                                 bg=TERM_BG, fg=TERM_TEXT,
                                 insertbackground=TERM_TEXT,
                                 relief="flat", bd=0, padx=8, pady=6)
         self.tpl_body.pack(fill=BOTH, expand=True)
-        ttk.Button(r, text="💾 Save Template", command=self._tpl_save,
-                   bootstyle="primary").pack(anchor=W, pady=(8,0))
+
+        abar = ttk.Frame(rcard); abar.pack(fill=X, pady=(8,0))
+        ttk.Button(abar, text="💾 Save Template", command=self._tpl_save,
+                   bootstyle="primary").pack(side=LEFT, padx=(0,6))
+        ttk.Button(abar, text="▶ Run Template on Target Device", command=self._tpl_run,
+                   bootstyle="warning").pack(side=LEFT)
+        tip(abar.winfo_children()[-1],
+            "Pushes the selected template's commands to the target device — asks "
+            "for confirmation and shows the exact commands first")
 
     def _seed_templates(self):
         defaults = [
@@ -3914,40 +4843,57 @@ class AppV9(App):
     # TAB — COMPLIANCE
     # ══════════════════════════════════════════════════════════════════════
     def _tab_compliance(self):
-        f = ttk.Frame(self.nb); self.nb.add(f, text="  ✅  Compliance  ")
-        left = ttk.Frame(f, padding=(14,12,8,12), width=300)
-        left.pack(side=LEFT, fill=Y); left.pack_propagate(False)
-        self._shdr(left, "CONFIG COMPLIANCE")
-        ttk.Label(left, text="Checks running-config against\ndefined compliance rules.",
-                  font=(FONT_MONO,8), bootstyle="secondary", justify=LEFT).pack(anchor=W, pady=(0,10))
+        f = ttk.Frame(self.nb,padding=(10,8)); self.nb.add(f, text="  ✅  Compliance  ")
 
+        self._mk_context_bar(f).pack(fill=X, pady=(0,8))
+
+        body = ttk.Frame(f); body.pack(fill=BOTH,expand=True)
+        left = ttk.Frame(body, padding=(0,0,6,0), width=310)
+        left.pack(side=LEFT, fill=Y); left.pack_propagate(False)
+
+        card = ttk.Frame(left,bootstyle="dark",padding=(12,10)); card.pack(fill=X,pady=(0,8))
+        ttk.Label(card,text="RUN COMPLIANCE",font=(FONT_MONO,9,"bold"),
+                  bootstyle="light").pack(anchor=W,pady=(0,4))
+        ttk.Label(card, text="Checks the running-config against the rules "
+                              "defined below and scores it.",
+                  font=(FONT_MONO,7), bootstyle="secondary",
+                  wraplength=260,justify=LEFT).pack(anchor=W, pady=(0,8))
         for t,c,bs,h in [
-            ("▶ Check Current Device", self._run_compliance,     "success",       "Run compliance on connected device"),
+            ("▶ Check Target Device",  self._run_compliance,     "success",       "Run compliance on the target device"),
             ("🌐 Check All Devices",   self._compliance_all,     "warning",       "Batch compliance across all devices"),
-            ("📤 Export Report",       self._export_compliance,  "info-outline",  "Save compliance report"),
+            ("📤 Export Report",       self._export_compliance,  "info-outline",  "Save compliance report as CSV"),
             ("⚙️  Manage Rules…",      self._compliance_rules,   "secondary-outline","Add/edit compliance rules"),
         ]:
-            b = ttk.Button(left,text=t,command=c,bootstyle=bs)
+            b = ttk.Button(card,text=t,command=c,bootstyle=bs)
             b.pack(fill=X,pady=3,padx=2); tip(b,h)
 
-        ttk.Separator(left, orient=HORIZONTAL).pack(fill=X, pady=(12,8))
-        self._shdr(left, "RULES")
-        lbf = ttk.Frame(left); lbf.pack(fill=BOTH, expand=True)
+        rules_card = ttk.Frame(left,bootstyle="dark",padding=(12,10)); rules_card.pack(fill=BOTH,expand=True)
+        ttk.Label(rules_card,text="RULES",font=(FONT_MONO,9,"bold"),
+                  bootstyle="light").pack(anchor=W,pady=(0,6))
+        lbf = ttk.Frame(rules_card); lbf.pack(fill=BOTH, expand=True)
         self.comp_rules_lb = tk.Listbox(lbf, font=(FONT_MONO,8), bg=TERM_BG, fg=TERM_TEXT,
                                          selectbackground=TERM_PUR, selectforeground="#000",
-                                         relief="flat", bd=0, activestyle="none")
+                                         relief="flat", bd=0, activestyle="none",highlightthickness=0)
         sc2 = ttk.Scrollbar(lbf, orient=VERTICAL, command=self.comp_rules_lb.yview,
                              bootstyle="secondary-round")
         self.comp_rules_lb.configure(yscrollcommand=sc2.set)
         self.comp_rules_lb.pack(side=LEFT, fill=BOTH, expand=True); sc2.pack(side=RIGHT, fill=Y)
         self._comp_refresh_rules()
 
-        ttk.Separator(f, orient=VERTICAL).pack(side=LEFT, fill=Y, padx=4)
-        r = ttk.Frame(f, padding=(8,12)); r.pack(side=LEFT, fill=BOTH, expand=True)
-        self._hdr(r, "COMPLIANCE REPORT")
-        self.comp_out = self._mkbox(r)
-        self._search(r, self.comp_out)
+        r = ttk.Frame(body, padding=(6,0,0,0)); r.pack(side=LEFT, fill=BOTH, expand=True)
+        rcard=ttk.Frame(r,bootstyle="dark",padding=(12,10)); rcard.pack(fill=BOTH,expand=True)
+        rh = ttk.Frame(rcard); rh.pack(fill=X,pady=(0,6))
+        ttk.Label(rh, text="COMPLIANCE REPORT", font=(FONT_MONO,9,"bold"),
+                  bootstyle="light").pack(side=LEFT)
+        for t,bs in [(" ✔ Pass ","success"),(" ✘ Fail ","danger"),(" ⚠ Warning ","warning")]:
+            ttk.Label(rh,text=t,font=(FONT_MONO,7),bootstyle=bs).pack(side=LEFT,padx=4)
+        self.comp_out = self._mkbox(rcard)
+        self._search(rcard, self.comp_out)
         self._comp_results = []
+        self._write(self.comp_out,
+                     "  Click ▶ Check Target Device (or Check All Devices) to run the "
+                     "rules on the left against a real running-config. No score is "
+                     "shown until a check actually runs.\n","div")
 
     def _comp_refresh_rules(self):
         self.comp_rules_lb.delete(0,"end")
@@ -4059,29 +5005,42 @@ class AppV9(App):
     # TAB — ALERTS
     # ══════════════════════════════════════════════════════════════════════
     def _tab_alerts(self):
-        f = ttk.Frame(self.nb); self.nb.add(f, text="  🔔  Alerts  ")
-        top = ttk.Frame(f, padding=(12,10)); top.pack(fill=X)
-        self._shdr(top, "ALERTS & NOTIFICATIONS")
+        f = ttk.Frame(self.nb,padding=(10,8)); self.nb.add(f, text="  🔔  Alerts  ")
+
+        top = ttk.Frame(f, bootstyle="dark", padding=(12,10)); top.pack(fill=X, pady=(0,8))
+        ttk.Label(top, text="ALERTS & NOTIFICATIONS", font=(FONT_MONO,9,"bold"),
+                  bootstyle="light").pack(anchor=W,pady=(0,6))
         bf = ttk.Frame(top); bf.pack(fill=X)
-        for t,c,bs in [("🔄 Refresh",  self._load_alerts,  "info-outline"),
-                        ("✔ Ack All",   self._ack_all_alerts,"success-outline"),
-                        ("🗑️  Clear All",self._clear_alerts, "danger-outline"),
-                        ("➕ Add Test Alert",self._add_test_alert,"secondary-outline")]:
-            ttk.Button(bf,text=t,command=c,bootstyle=bs,width=16).pack(side=LEFT,padx=4)
+        for t,c,bs,h in [("🔄 Refresh",  self._load_alerts,  "info-outline","Reload alerts from the database"),
+                        ("✔ Acknowledge All",   self._ack_all_alerts,"success-outline","Mark every alert as acknowledged"),
+                        ("🗑️  Clear All",self._clear_alerts, "danger-outline","Permanently delete all alerts")]:
+            b=ttk.Button(bf,text=t,command=c,bootstyle=bs,width=18)
+            b.pack(side=LEFT,padx=4); tip(b,h)
 
-        # Alert thresholds
-        th = ttk.Frame(top, padding=(0,8,0,0)); th.pack(fill=X)
-        ttk.Label(th,text="CPU Alert Threshold %:",font=(FONT_MONO,8)).pack(side=LEFT)
-        self.cpu_thresh = ttk.Spinbox(th,from_=50,to=100,width=5,font=(FONT_MONO,9))
-        self.cpu_thresh.set(80); self.cpu_thresh.pack(side=LEFT,padx=6)
-        ttk.Label(th,text="  Memory Alert Threshold %:",font=(FONT_MONO,8)).pack(side=LEFT)
-        self.mem_thresh = ttk.Spinbox(th,from_=50,to=100,width=5,font=(FONT_MONO,9))
-        self.mem_thresh.set(90); self.mem_thresh.pack(side=LEFT,padx=6)
+        ttk.Separator(top,orient=HORIZONTAL).pack(fill=X,pady=(10,8))
+        th = ttk.Frame(top); th.pack(fill=X)
+        ttk.Label(th,text="THRESHOLDS",font=(FONT_MONO,8,"bold"),bootstyle="secondary").pack(anchor=W,pady=(0,4))
+        thr = ttk.Frame(top); thr.pack(fill=X)
+        ttk.Label(thr,text="CPU alert at:",font=(FONT_MONO,8)).pack(side=LEFT)
+        self.cpu_thresh = ttk.Spinbox(thr,from_=50,to=100,width=5,font=(FONT_MONO,9))
+        self.cpu_thresh.set(80); self.cpu_thresh.pack(side=LEFT,padx=(4,4))
+        ttk.Label(thr,text="%   Memory alert at:",font=(FONT_MONO,8)).pack(side=LEFT)
+        self.mem_thresh = ttk.Spinbox(thr,from_=50,to=100,width=5,font=(FONT_MONO,9))
+        self.mem_thresh.set(90); self.mem_thresh.pack(side=LEFT,padx=(4,4))
+        ttk.Label(thr,text="%",font=(FONT_MONO,8)).pack(side=LEFT)
 
-        ttk.Separator(f,orient=HORIZONTAL).pack(fill=X)
-        self._hdr(f,"ACTIVE ALERTS")
-        self.alerts_out = self._mkbox(f)
-        self._search(f,self.alerts_out)
+        ttk.Separator(top,orient=HORIZONTAL).pack(fill=X,pady=(10,8))
+        ttk.Label(top,text="TESTING",font=(FONT_MONO,8,"bold"),bootstyle="secondary").pack(anchor=W,pady=(0,4))
+        tb=ttk.Button(top,text="➕ Add Test Alert",command=self._add_test_alert,
+                       bootstyle="secondary-outline")
+        tb.pack(anchor=W)
+        tip(tb,"Creates one synthetic alert so you can try Acknowledge/Clear — "
+                "not a real network event")
+
+        rcard = ttk.Frame(f, bootstyle="dark", padding=(12,10)); rcard.pack(fill=BOTH,expand=True)
+        self._shdr(rcard,"ACTIVE ALERTS")
+        self.alerts_out = self._mkbox(rcard)
+        self._search(rcard,self.alerts_out)
         self._load_alerts()
 
     def _load_alerts(self):
@@ -4103,7 +5062,9 @@ class AppV9(App):
         self._setbar("All alerts acknowledged.")
 
     def _clear_alerts(self):
-        if messagebox.askyesno("Confirm","Delete all alerts?"):
+        if messagebox.askyesno("Clear All Alerts",
+                                "Permanently delete all alerts (including acknowledged ones)?\n\n"
+                                "This cannot be undone."):
             with db_conn() as c: c.execute("DELETE FROM alerts")
             self._load_alerts(); self._refresh_dashboard()
 
@@ -4115,32 +5076,50 @@ class AppV9(App):
     # TAB — REPORTS
     # ══════════════════════════════════════════════════════════════════════
     def _tab_reports(self):
-        f = ttk.Frame(self.nb); self.nb.add(f, text="  📊  Reports  ")
-        left = ttk.Frame(f,padding=(14,12,8,12),width=300)
+        f = ttk.Frame(self.nb,padding=(10,8)); self.nb.add(f, text="  📊  Reports  ")
+
+        self._mk_context_bar(f).pack(fill=X, pady=(0,8))
+
+        body = ttk.Frame(f); body.pack(fill=BOTH,expand=True)
+        left = ttk.Frame(body,padding=(0,0,6,0),width=310)
         left.pack(side=LEFT,fill=Y); left.pack_propagate(False)
-        self._shdr(left,"REPORTS & EXPORTS")
+
+        gcard=ttk.Frame(left,bootstyle="dark",padding=(12,10)); gcard.pack(fill=X,pady=(0,8))
+        ttk.Label(gcard,text="1 · GENERATE A REPORT",font=(FONT_MONO,9,"bold"),
+                  bootstyle="light").pack(anchor=W,pady=(0,6))
         for t,c,bs,h in [
-            ("📄 Generate Session Report",self._gen_session_rpt,"primary",     "Full session log as text"),
-            ("💻 Device Health Report",   self._gen_health_rpt, "success",     "Health status of connected device"),
-            ("📋 Inventory Report",       self._gen_inv_rpt,    "info",        "Device inventory summary"),
-            ("✅ Compliance Report",      self._run_compliance,  "warning",     "Run compliance and show results"),
-            ("─────────────────────","", "secondary-outline",""),
-            ("📤 Export TXT",     self._exp_txt,           "secondary-outline","Save as plain text"),
-            ("📤 Export JSON",    self._exp_json,          "secondary-outline","Save as JSON"),
-            ("📤 Export CSV",     self._exp_csv,           "secondary-outline","Save as CSV"),
-            ("📤 Export HTML",    self._export_html_rpt,   "info-outline",    "Save as styled HTML"),
-            ("📤 Export PDF",     self._export_pdf_rpt,    "danger-outline",  "Save as PDF (needs reportlab)"),
+            ("📄 Session Report",self._gen_session_rpt,"primary",     "Every command run this session, as text"),
+            ("💻 Device Health Report",   self._gen_health_rpt, "success",     "Health checks on the target device"),
+            ("📋 Inventory Report",       self._gen_inv_rpt,    "info",        "Summary of all configured devices"),
+            ("✅ Compliance Report",      self._run_compliance,  "warning",     "Run compliance and show the results"),
         ]:
-            if t.startswith("─"):
-                ttk.Separator(left,orient=HORIZONTAL).pack(fill=X,pady=6); continue
-            b=ttk.Button(left,text=t,command=c,bootstyle=bs)
+            b=ttk.Button(gcard,text=t,command=c,bootstyle=bs)
             b.pack(fill=X,pady=3,padx=2); tip(b,h)
 
-        ttk.Separator(f,orient=VERTICAL).pack(side=LEFT,fill=Y,padx=4)
-        r=ttk.Frame(f,padding=(8,12)); r.pack(side=LEFT,fill=BOTH,expand=True)
-        self._hdr(r,"REPORT PREVIEW")
-        self.rpt_out = self._mkbox(r)
-        self._search(r,self.rpt_out)
+        ecard=ttk.Frame(left,bootstyle="dark",padding=(12,10)); ecard.pack(fill=BOTH,expand=True)
+        ttk.Label(ecard,text="2 · EXPORT THE PREVIEW",font=(FONT_MONO,9,"bold"),
+                  bootstyle="light").pack(anchor=W,pady=(0,2))
+        ttk.Label(ecard,text="Saves whatever is currently shown in the preview on the right.",
+                  font=(FONT_MONO,7),bootstyle="secondary",
+                  wraplength=250,justify=LEFT).pack(anchor=W,pady=(0,6))
+        for t,c,bs,h in [
+            ("📤 Export TXT",     self._exp_txt,           "secondary-outline","Save the preview as plain text"),
+            ("📤 Export JSON",    self._exp_json,          "secondary-outline","Save the preview as JSON"),
+            ("📤 Export CSV",     self._exp_csv,           "secondary-outline","Save the preview as CSV"),
+            ("📤 Export HTML",    self._export_html_rpt,   "info-outline",    "Save the session log as styled HTML"),
+            ("📤 Export PDF",     self._export_pdf_rpt,    "danger-outline",  "Save the session log as PDF (needs reportlab)"),
+        ]:
+            b=ttk.Button(ecard,text=t,command=c,bootstyle=bs)
+            b.pack(fill=X,pady=3,padx=2); tip(b,h)
+
+        r=ttk.Frame(body,padding=(6,0,0,0)); r.pack(side=LEFT,fill=BOTH,expand=True)
+        rcard=ttk.Frame(r,bootstyle="dark",padding=(12,10)); rcard.pack(fill=BOTH,expand=True)
+        self._shdr(rcard,"REPORT PREVIEW")
+        self.rpt_out = self._mkbox(rcard)
+        self._search(rcard,self.rpt_out)
+        self._write(self.rpt_out,
+                     "  Choose a report type on the left to generate a preview here, "
+                     "then export it in the format you need.\n","div")
 
     def _gen_session_rpt(self):
         self._clr(self.rpt_out)
@@ -4204,21 +5183,56 @@ class AppV9(App):
     # TAB — TOPOLOGY
     # ══════════════════════════════════════════════════════════════════════
     def _tab_topology(self):
-        f = ttk.Frame(self.nb); self.nb.add(f, text="  🗺️   Topology  ")
-        top = ttk.Frame(f, padding=(12,8)); top.pack(fill=X)
-        self._shdr(top, "NETWORK TOPOLOGY")
-        bf = ttk.Frame(top); bf.pack(fill=X)
-        for t,c,bs in [("📡 Build from CDP", self._topo_cdp,    "info"),
-                        ("📡 Build from LLDP",self._topo_lldp,   "secondary"),
-                        ("🔄 Add Devices",    self._topo_devices,"primary-outline"),
-                        ("🗑️  Clear",         self._topo_clear,  "danger-outline"),
-                        ("📤 Export SVG",     self._topo_export, "warning-outline")]:
-            ttk.Button(bf,text=t,command=c,bootstyle=bs,width=16).pack(side=LEFT,padx=3)
+        f = ttk.Frame(self.nb, padding=(10,8)); self.nb.add(f, text="  🗺️   Topology  ")
 
-        ttk.Separator(f,orient=HORIZONTAL).pack(fill=X,pady=(4,0))
+        self._mk_context_bar(f).pack(fill=X, pady=(0,8))
 
-        # Canvas for topology drawing
-        canvas_frame = ttk.Frame(f); canvas_frame.pack(fill=BOTH, expand=True)
+        top = ttk.Frame(f, bootstyle="dark", padding=(12,10)); top.pack(fill=X, pady=(0,8))
+        dh = ttk.Frame(top); dh.pack(fill=X)
+        ttk.Label(dh, text="DISCOVERY ACTIONS", font=(FONT_MONO,9,"bold"),
+                  bootstyle="light").pack(side=LEFT)
+        ttk.Label(dh, text="  (build the topology from real device data)",
+                  font=(FONT_MONO,7), bootstyle="secondary").pack(side=LEFT)
+        bf = ttk.Frame(top); bf.pack(fill=X, pady=(6,0))
+        for t,c,bs,h in [
+            ("📡 Build from CDP", self._topo_cdp,    "info",
+             "Discover neighbors of the connected device via CDP"),
+            ("📡 Build from LLDP",self._topo_lldp,   "secondary",
+             "Discover neighbors of the connected device via LLDP"),
+            ("🔄 Add Known Devices", self._topo_devices,"primary-outline",
+             "Add every saved device to the topology"),
+            ("🗑️  Clear Topology", self._topo_clear,  "danger-outline",
+             "Remove all topology data"),
+        ]:
+            b=ttk.Button(bf,text=t,command=c,bootstyle=bs,width=18)
+            b.pack(side=LEFT,padx=3); tip(b,h)
+
+        vh = ttk.Frame(top); vh.pack(fill=X, pady=(10,0))
+        ttk.Label(vh, text="VIEW", font=(FONT_MONO,9,"bold"),
+                  bootstyle="light").pack(side=LEFT)
+        vf = ttk.Frame(top); vf.pack(fill=X, pady=(6,0))
+        b3d = ttk.Button(vf,text="🧊 3D View",command=self._topo_toggle_3d,
+                          bootstyle="success",width=14)
+        b3d.pack(side=LEFT,padx=3)
+        tip(b3d, "Open an interactive 3D topology in a separate window "
+                 "(requires the optional pywebview package + a local three.js file)")
+        ttk.Button(vf,text="🔄 Refresh 2D",command=self._topo_draw,
+                   bootstyle="secondary-outline",width=14).pack(side=LEFT,padx=3)
+        ttk.Button(vf,text="📤 Export SVG",command=self._topo_export,
+                   bootstyle="warning-outline",width=14).pack(side=LEFT,padx=3)
+
+        lg = ttk.Frame(top); lg.pack(fill=X, pady=(8,0))
+        ttk.Label(lg,text="Legend:",font=(FONT_MONO,7,"bold"),
+                  bootstyle="secondary").pack(side=LEFT,padx=(0,6))
+        for t,bs in [("● Online","success"),("● Offline","danger"),("● Unknown","secondary")]:
+            ttk.Label(lg,text=t,font=(FONT_MONO,7),bootstyle=bs).pack(side=LEFT,padx=6)
+
+        # 2D canvas — the always-available fallback view. Unchanged from the
+        # original implementation: same widget, same drag bindings, same
+        # self._topo_nodes data source.
+        canvas_card = ttk.Frame(f, bootstyle="dark", padding=(8,8))
+        canvas_card.pack(fill=BOTH, expand=True)
+        canvas_frame = ttk.Frame(canvas_card); canvas_frame.pack(fill=BOTH, expand=True)
         self.topo_canvas = tk.Canvas(canvas_frame, bg=TERM_BG,
                                       highlightthickness=0)
         hbar = ttk.Scrollbar(canvas_frame, orient=HORIZONTAL,
@@ -4251,8 +5265,12 @@ class AppV9(App):
         nodes = list(self._topo_nodes.items())
         n = len(nodes)
         if n == 0:
-            self.topo_canvas.create_text(400,200,text="No topology data.\nUse Build from CDP/LLDP.",
-                                          fill=TERM_GRY, font=(FONT_MONO,12))
+            w = max(self.topo_canvas.winfo_width(), 400)
+            self.topo_canvas.create_text(
+                w/2,180,
+                text="No topology data yet.\n\nUse a Discovery Action above (Build from CDP,\n"
+                     "Build from LLDP, or Add Known Devices) to populate it.",
+                fill=TERM_GRY, font=(FONT_MONO,11), justify="center")
             return
         import math
         cx, cy, r = 500, 300, min(220, max(100, n*25))
@@ -4262,7 +5280,11 @@ class AppV9(App):
             x = cx + r*math.cos(angle)
             y = cy + r*math.sin(angle)
             positions[name] = (x,y)
-            color = TERM_GRN if info.get("status")=="online" else TERM_RED
+            status = info.get("status")
+            # Real status only: online→green, offline→red, anything else
+            # (including "unknown") is shown distinctly rather than as red,
+            # since "unknown" is not the same fact as "offline".
+            color = TERM_GRN if status=="online" else TERM_RED if status=="offline" else TERM_GRY
             self.topo_canvas.create_oval(x-22,y-22,x+22,y+22,fill=color,outline="white",width=2)
             self.topo_canvas.create_text(x,y+32,text=name[:14],fill=TERM_TEXT,
                                           font=(FONT_MONO,7))
@@ -4344,33 +5366,171 @@ class AppV9(App):
         with open(fn,"w") as svgf: svgf.write("\n".join(lines))
         messagebox.showinfo("Exported", f"Topology SVG saved:\n{fn}")
 
+    # ── 3D Topology (optional — self._topo_nodes remains the only data
+    #    source; the 2D canvas above is untouched and always available) ────
+    def _topo_snapshot(self):
+        """Read-only adapter: turns the existing self._topo_nodes into a
+        plain JSON-able structure for the 3D viewer. Never mutates
+        self._topo_nodes and never invents nodes/links beyond what's there."""
+        nodes = []
+        for name, info in self._topo_nodes.items():
+            d = self.devices.get(name, {})
+            nodes.append({
+                "name": name,
+                "status": info.get("status", "unknown"),
+                "host": info.get("host") or d.get("host", ""),
+                "role": infer_device_role(name, d),
+                "neighbors": list(info.get("neighbors", [])),
+            })
+        return {"nodes": nodes, "generated": datetime.now().isoformat()}
+
+    def _topo3d_asset_dir(self):
+        """Directory for bundled 3D assets — resolved so it still works from
+        inside a PyInstaller-built EXE (sys._MEIPASS) rather than assuming a
+        developer machine's file layout."""
+        base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+        d = os.path.join(base, "assets", "topology3d")
+        os.makedirs(d, exist_ok=True)
+        return d
+
+    def _topo3d_write_html(self, snapshot, asset_dir):
+        """Regenerates the local HTML file with the current topology
+        snapshot inlined as JSON (avoids file:// fetch/CORS problems) next
+        to the vendored three.min.js. Called fresh every time 3D View is
+        opened so it always reflects live data."""
+        html = _TOPO3D_HTML_TEMPLATE.replace("__TOPOLOGY_DATA__", json.dumps(snapshot))
+        out_path = os.path.join(asset_dir, "_generated_topology.html")
+        with open(out_path, "w", encoding="utf-8") as f:
+            f.write(html)
+        return out_path
+
+    def _topo3d_make_api(self):
+        """JS↔Python bridge exposed as window.pywebview.api in the 3D view.
+        Deliberately minimal — its one method routes a click straight into
+        ShikaNet's existing Devices tab/detail view instead of building any
+        parallel device-management UI."""
+        app = self
+        class _Api:
+            def select_device(self, name):
+                def _apply():
+                    if name in app.devices and hasattr(app, "dev_lb"):
+                        app.nb.select_by_label("Devices")
+                        try:
+                            idx = list(app.devices.keys()).index(name)
+                            app.dev_lb.selection_clear(0, "end")
+                            app.dev_lb.selection_set(idx)
+                            app._dev_sel()
+                        except Exception:
+                            pass
+                app.root.after(0, _apply)
+        return _Api()
+
+    def _topo_toggle_3d(self):
+        """Opens the interactive 3D topology in a local offline webview
+        window when pywebview + the vendored three.js asset are both
+        available. Otherwise explains exactly what's missing and leaves the
+        2D canvas (above) as the fully-working fallback — never fakes 3D."""
+        snap = self._topo_snapshot()
+        if not snap["nodes"]:
+            messagebox.showinfo(
+                "No Topology Data",
+                "There's no topology data to visualize yet.\n\n"
+                "Use a Discovery Action above (Build from CDP, Build from "
+                "LLDP, or Add Known Devices) first, then try 3D View again.")
+            return
+        try:
+            import webview  # pywebview — optional; imported lazily so the
+                             # rest of ShikaNet works if it isn't installed
+        except ImportError:
+            messagebox.showinfo(
+                "3D View Unavailable",
+                "The 3D topology view needs the optional 'pywebview' "
+                "package, which isn't installed.\n\n"
+                "Install it with:\n    pip install pywebview\n\n"
+                "The 2D topology view below remains fully available.")
+            return
+        asset_dir = self._topo3d_asset_dir()
+        three_js = os.path.join(asset_dir, "three.min.js")
+        if not os.path.isfile(three_js):
+            messagebox.showinfo(
+                "3D View Unavailable",
+                "The 3D topology view needs a local copy of three.js that "
+                "isn't present yet.\n\n"
+                f"Download three.min.js (r128) and place it at:\n{three_js}\n\n"
+                "See assets/topology3d/README_SETUP.md for exact steps. "
+                "The 2D topology view below remains fully available.")
+            return
+        html_path = self._topo3d_write_html(snap, asset_dir)
+        api = self._topo3d_make_api()
+        def _launch():
+            # Runs on the Tkinter main thread (see note below) — webview.start()
+            # blocks until the 3D window is closed, so ShikaNet's own window
+            # will not repaint/respond during that time. This is expected:
+            # pywebview's GUI event loop must own the main thread on Windows
+            # (and macOS), so it cannot run concurrently with Tk's mainloop on
+            # a second thread. Nothing else in ShikaNet depends on the
+            # mainloop pumping events while the 3D window is open.
+            try:
+                webview.create_window("ShikaNet — 3D Topology", html_path,
+                                       width=1100, height=750, js_api=api)
+                webview.start()
+            except Exception as e:
+                messagebox.showerror(
+                    "3D View Error", f"Could not start the 3D viewer:\n{e}")
+        # Previously this was dispatched via threading.Thread(...), which is
+        # what caused "pywebview must be run on a main thread" on Windows —
+        # webview.start() runs its own native event loop and pywebview
+        # requires that to happen on the process's main thread, not a worker
+        # thread. self.root.after(0, ...) queues _launch() onto Tkinter's own
+        # event queue instead, so it executes on the main thread (the same
+        # thread Tk's mainloop is already running on) right after the
+        # current button-click event finishes being processed — the "right"
+        # way to hand off to code that must run on the main thread from
+        # inside a Tk callback, rather than moving it to a different thread.
+        self.root.after(0, _launch)
+
     # ══════════════════════════════════════════════════════════════════════
     # TAB — FIRMWARE AUDIT
     # ══════════════════════════════════════════════════════════════════════
     def _tab_firmware(self):
-        f = ttk.Frame(self.nb); self.nb.add(f, text="  🔧  Firmware  ")
-        left = ttk.Frame(f,padding=(14,12,8,12),width=300)
+        f = ttk.Frame(self.nb,padding=(10,8)); self.nb.add(f, text="  🔧  Firmware  ")
+
+        self._mk_context_bar(f).pack(fill=X, pady=(0,8))
+
+        body = ttk.Frame(f); body.pack(fill=BOTH,expand=True)
+        left = ttk.Frame(body,padding=(0,0,6,0),width=300)
         left.pack(side=LEFT,fill=Y); left.pack_propagate(False)
-        self._shdr(left,"FIRMWARE & IOS AUDIT")
-        ttk.Label(left,
-                  text="Detects IOS versions across all\ndevices and flags outdated ones.",
-                  font=(FONT_MONO,8),bootstyle="secondary",justify=LEFT).pack(anchor=W,pady=(0,10))
-        for t,c,bs in [("🔍 Audit Current Device",  self._fw_audit_one, "success"),
-                        ("🌐 Audit All Devices",      self._fw_audit_all, "warning"),
-                        ("📤 Export Firmware Report", self._fw_export,    "info-outline")]:
-            ttk.Button(left,text=t,command=c,bootstyle=bs).pack(fill=X,pady=3,padx=2)
-        ttk.Separator(left,orient=HORIZONTAL).pack(fill=X,pady=(10,8))
-        ttk.Label(left,text="IOS versions flagged as EOL:",
+        card = ttk.Frame(left,bootstyle="dark",padding=(12,10)); card.pack(fill=BOTH,expand=True)
+        ttk.Label(card,text="FIRMWARE AUDIT",font=(FONT_MONO,9,"bold"),
+                  bootstyle="light").pack(anchor=W,pady=(0,4))
+        ttk.Label(card,
+                  text="Reads the IOS version from 'show version' and flags "
+                       "versions ShikaNet considers end-of-life. This is a "
+                       "detection/reporting tool — ShikaNet does not push "
+                       "firmware upgrades to devices.",
+                  font=(FONT_MONO,7),bootstyle="secondary",wraplength=250,
+                  justify=LEFT).pack(anchor=W,pady=(0,10))
+        for t,c,bs,h in [("🔍 Audit Target Device",  self._fw_audit_one, "success","Check the target device's IOS version"),
+                          ("🌐 Audit All Devices",      self._fw_audit_all, "warning","Check every configured device"),
+                          ("📤 Export Firmware Report", self._fw_export,    "info-outline","Save results as CSV")]:
+            b=ttk.Button(card,text=t,command=c,bootstyle=bs)
+            b.pack(fill=X,pady=3,padx=2); tip(b,h)
+        ttk.Separator(card,orient=HORIZONTAL).pack(fill=X,pady=(10,8))
+        ttk.Label(card,text="IOS versions flagged as EOL:",
                   font=(FONT_MONO,8,"bold"),bootstyle="warning").pack(anchor=W,pady=(0,4))
-        ttk.Label(left,
-                  text="12.x, 15.0, 15.1 (partial)\n(add more in compliance rules)",
+        ttk.Label(card,
+                  text="12.x, 15.0, 15.1 (partial)\nAdd more in Compliance → Manage Rules…",
                   font=(FONT_MONO,7),bootstyle="secondary").pack(anchor=W)
         self._fw_results = []
-        ttk.Separator(f,orient=VERTICAL).pack(side=LEFT,fill=Y,padx=4)
-        r=ttk.Frame(f,padding=(8,12)); r.pack(side=LEFT,fill=BOTH,expand=True)
-        self._hdr(r,"FIRMWARE AUDIT REPORT")
-        self.fw_out = self._mkbox(r)
-        self._search(r,self.fw_out)
+
+        r=ttk.Frame(body,padding=(6,0,0,0)); r.pack(side=LEFT,fill=BOTH,expand=True)
+        rcard=ttk.Frame(r,bootstyle="dark",padding=(12,10)); rcard.pack(fill=BOTH,expand=True)
+        self._shdr(rcard,"FIRMWARE AUDIT REPORT")
+        self.fw_out = self._mkbox(rcard)
+        self._search(rcard,self.fw_out)
+        self._write(self.fw_out,
+                     "  Click 🔍 Audit Target Device or 🌐 Audit All Devices to check "
+                     "IOS versions. ✔ Supported and ⚠ EOL results appear here.\n","div")
 
     def _fw_audit_one(self):
         if not self._req(): return
@@ -4438,15 +5598,21 @@ class AppV9(App):
     # TAB — AI ASSISTANT
     # ══════════════════════════════════════════════════════════════════════
     def _tab_ai(self):
-        f = ttk.Frame(self.nb); self.nb.add(f, text="  🤖  AI Assistant  ")
-        top = ttk.Frame(f, padding=(14,10)); top.pack(fill=X)
-        self._shdr(top, "AI NETWORK ASSISTANT")
-        ttk.Label(top,
-                  text="Powered by Claude — explains output, suggests fixes, generates configs.",
-                  font=(FONT_MONO,8), bootstyle="secondary").pack(anchor=W, pady=(0,8))
+        f = ttk.Frame(self.nb,padding=(10,8)); self.nb.add(f, text="  🤖  AI Assistant  ")
 
-        # API key row
-        ak = ttk.Frame(top); ak.pack(fill=X, pady=(0,8))
+        self._mk_context_bar(f).pack(fill=X, pady=(0,8))
+
+        top = ttk.Frame(f, bootstyle="dark", padding=(12,10)); top.pack(fill=X, pady=(0,8))
+        ttk.Label(top, text="AI NETWORK ASSISTANT", font=(FONT_MONO,9,"bold"),
+                  bootstyle="light").pack(anchor=W)
+        ttk.Label(top,
+                  text="Sends your question (and, for the quick actions below, real command "
+                       "output from this session) to the Anthropic API and shows the reply "
+                       "below. Nothing is sent unless you ask a question or click an action.",
+                  font=(FONT_MONO,7), bootstyle="secondary",wraplength=650,
+                  justify=LEFT).pack(anchor=W, pady=(2,8))
+
+        ak = ttk.Frame(top); ak.pack(fill=X, pady=(0,4))
         ttk.Label(ak, text="API Key:", font=(FONT_MONO,9,"bold")).pack(side=LEFT)
         self.ai_key = ttk.Entry(ak, font=(FONT_MONO,10), show="*", width=48)
         saved_key = db_get_setting("anthropic_api_key","")
@@ -4454,28 +5620,35 @@ class AppV9(App):
         self.ai_key.pack(side=LEFT, padx=8, ipady=3)
         ttk.Button(ak, text="💾 Save Key", command=self._ai_save_key,
                    bootstyle="warning-outline", width=12).pack(side=LEFT)
+        ttk.Label(top,text="Get a key at console.anthropic.com — stored in ShikaNet's local database.",
+                  font=(FONT_MONO,7),bootstyle="secondary").pack(anchor=W,pady=(2,8))
 
-        # Quick action buttons
-        qr = ttk.Frame(top); qr.pack(fill=X, pady=(0,8))
+        ttk.Label(top,text="QUICK ACTIONS",font=(FONT_MONO,8,"bold"),
+                  bootstyle="secondary").pack(anchor=W,pady=(0,4))
+        qr = ttk.Frame(top); qr.pack(fill=X)
         for t,c,h in [
             ("💡 Explain Last Output",  self._ai_explain_last,   "Explain the last command output"),
             ("🔧 Suggest Fix",          self._ai_suggest_fix,    "Suggest troubleshooting steps"),
-            ("📝 Generate Config",      self._ai_gen_config,     "Generate a config from description"),
-            ("❤ Summarise Health",     self._ai_health_summary, "Summarise device health"),
-            ("📋 Review Config",        self._ai_review_config,  "Review running config for issues"),
+            ("📝 Generate Config",      self._ai_gen_config,     "Generate a config from the text you type below"),
+            ("❤ Summarise Health",     self._ai_health_summary, "Pull health commands from the target device and summarise"),
+            ("📋 Review Config",        self._ai_review_config,  "Pull running-config from the target device and review it"),
         ]:
             b = ttk.Button(qr, text=t, command=c, bootstyle="info-outline", width=20)
             b.pack(side=LEFT, padx=3); tip(b,h)
 
-        ttk.Separator(f, orient=HORIZONTAL).pack(fill=X)
+        chat_card = ttk.Frame(f, bootstyle="dark", padding=(12,10)); chat_card.pack(fill=BOTH, expand=True)
+        self._shdr(chat_card, "CONVERSATION")
+        self.ai_out = self._mkbox(chat_card)
+        if not saved_key:
+            self._write(self.ai_out,
+                         "  Setup needed: enter your Anthropic API key above and click "
+                         "💾 Save Key before asking a question or using a quick action.\n","wrn")
+        else:
+            self._write(self.ai_out,
+                         "  Ask a question below, or use a Quick Action above. Responses "
+                         "come from the real Anthropic API — this can take a few seconds.\n","div")
 
-        # Chat area
-        chat_f = ttk.Frame(f, padding=(8,8)); chat_f.pack(fill=BOTH, expand=True)
-        self._hdr(chat_f, "CONVERSATION")
-        self.ai_out = self._mkbox(chat_f)
-
-        # Input row
-        inp_f = ttk.Frame(f, padding=(8,6)); inp_f.pack(fill=X)
+        inp_f = ttk.Frame(f, padding=(0,8,0,0)); inp_f.pack(fill=X)
         self.ai_input = ttk.Entry(inp_f, font=(FONT_MONO,10))
         self.ai_input.pack(side=LEFT, fill=X, expand=True, ipady=4, padx=(0,6))
         self.ai_input.bind("<Return>", lambda _: self._ai_chat())
@@ -4610,51 +5783,67 @@ class AppV9(App):
     # TAB — PLUGINS / SCRIPT RUNNER
     # ══════════════════════════════════════════════════════════════════════
     def _tab_plugins(self):
-        f = ttk.Frame(self.nb); self.nb.add(f, text="  🔌  Plugins  ")
-        left = ttk.Frame(f, padding=(14,12,8,12), width=320)
-        left.pack(side=LEFT, fill=Y); left.pack_propagate(False)
-        self._shdr(left, "PLUGIN / SCRIPT RUNNER")
-        ttk.Label(left,
-                  text="Load and run Python scripts that\nhave access to the SSH connection.",
-                  font=(FONT_MONO,8), bootstyle="secondary", justify=LEFT).pack(anchor=W, pady=(0,10))
+        f = ttk.Frame(self.nb,padding=(10,8)); self.nb.add(f, text="  🔌  Plugins  ")
 
-        ttk.Button(left, text="📂 Load Script…",
+        self._mk_context_bar(f).pack(fill=X, pady=(0,8))
+
+        body = ttk.Frame(f); body.pack(fill=BOTH,expand=True)
+        left = ttk.Frame(body, padding=(0,0,6,0), width=320)
+        left.pack(side=LEFT, fill=Y); left.pack_propagate(False)
+        card = ttk.Frame(left,bootstyle="dark",padding=(12,10)); card.pack(fill=BOTH,expand=True)
+        ttk.Label(card, text="SCRIPT RUNNER", font=(FONT_MONO,9,"bold"),
+                  bootstyle="light").pack(anchor=W,pady=(0,4))
+        ttk.Label(card,
+                  text="ShikaNet's plugin system is a Python script runner: it loads "
+                       "and executes a .py script with access to the live SSH "
+                       "connection. There is no separate plugin marketplace/"
+                       "install system — this is the entire feature.",
+                  font=(FONT_MONO,7), bootstyle="secondary", wraplength=270,
+                  justify=LEFT).pack(anchor=W, pady=(0,8))
+        ttk.Label(card, text="⚠  Scripts run with full Python access on your machine "
+                              "— only run scripts you trust.",
+                  font=(FONT_MONO,7), bootstyle="danger", wraplength=270,
+                  justify=LEFT).pack(anchor=W, pady=(0,10))
+
+        ttk.Button(card, text="📂 Load Script…",
                    command=self._plugin_load,
                    bootstyle="primary").pack(fill=X, pady=3, padx=2)
-        ttk.Button(left, text="▶ Run Script",
+        ttk.Button(card, text="▶ Run Script",
                    command=self._plugin_run,
                    bootstyle="success").pack(fill=X, pady=3, padx=2)
-        ttk.Button(left, text="⊘ Clear",
+        ttk.Button(card, text="⊘ Clear",
                    command=lambda: (self.plugin_code.delete("1.0","end"),
                                     self._clr(self.plugin_out)),
                    bootstyle="secondary-outline").pack(fill=X, pady=3, padx=2)
 
-        ttk.Separator(left, orient=HORIZONTAL).pack(fill=X, pady=(10,8))
-        ttk.Label(left, text="Available variables in script:",
+        ttk.Separator(card, orient=HORIZONTAL).pack(fill=X, pady=(10,8))
+        ttk.Label(card, text="Available variables in script:",
                   font=(FONT_MONO,8,"bold"), bootstyle="secondary").pack(anchor=W, pady=(0,4))
-        ttk.Label(left,
+        ttk.Label(card,
                   text="  conn  — active Netmiko connection\n"
                        "  app   — this App instance\n"
                        "  send  — app._send(cmd) helper\n"
                        "  write — app._write(box,text,tag)\n"
-                       "  box   — the plugin output box",
+                       "  box   — the plugin output box\n"
+                       "  devices, current — your device list / target device",
                   font=(FONT_MONO,7), bootstyle="secondary", justify=LEFT).pack(anchor=W)
 
-        ttk.Separator(f, orient=VERTICAL).pack(side=LEFT, fill=Y, padx=4)
-        r = ttk.Frame(f, padding=(8,8)); r.pack(side=LEFT, fill=BOTH, expand=True)
-        self._hdr(r, "SCRIPT EDITOR")
-        self.plugin_code = tk.Text(r, height=12, font=(FONT_MONO,10),
+        r = ttk.Frame(body, padding=(6,0,0,0)); r.pack(side=LEFT, fill=BOTH, expand=True)
+        ecard = ttk.Frame(r,bootstyle="dark",padding=(12,10)); ecard.pack(fill=BOTH,expand=True,pady=(0,8))
+        self._shdr(ecard, "SCRIPT EDITOR")
+        self.plugin_code = tk.Text(ecard, height=12, font=(FONT_MONO,10),
                                     bg=TERM_BG, fg=TERM_TEXT,
                                     insertbackground=TERM_TEXT,
                                     relief="flat", bd=0, padx=8, pady=6)
-        self.plugin_code.pack(fill=X, pady=(0,6))
+        self.plugin_code.pack(fill=BOTH, expand=True)
         self.plugin_code.insert("1.0",
             "# Example: run a command and print output\n"
             "output = send('show version')\n"
             "write(box, output + '\\n')\n")
-        ttk.Separator(r, orient=HORIZONTAL).pack(fill=X, pady=(0,6))
-        self._hdr(r, "OUTPUT")
-        self.plugin_out = self._mkbox(r)
+
+        ocard = ttk.Frame(r,bootstyle="dark",padding=(12,10)); ocard.pack(fill=BOTH,expand=True)
+        self._shdr(ocard, "OUTPUT")
+        self.plugin_out = self._mkbox(ocard)
 
     def _plugin_load(self):
         fn = filedialog.askopenfilename(title="Load Plugin Script",
@@ -4694,25 +5883,34 @@ class AppV9(App):
     # TAB — SETTINGS
     # ══════════════════════════════════════════════════════════════════════
     def _tab_settings(self):
-        f = ttk.Frame(self.nb, padding=(20,14)); self.nb.add(f, text="  ⚙️   Settings  ")
-        self._shdr(f, "APPLICATION SETTINGS")
+        f = ttk.Frame(self.nb, padding=(10,8)); self.nb.add(f, text="  ⚙️   Settings  ")
+        card = ttk.Frame(f, bootstyle="dark", padding=(14,12)); card.pack(fill=BOTH, expand=True)
+        ttk.Label(card,text="APPLICATION SETTINGS",font=(FONT_MONO,10,"bold"),
+                  bootstyle="light").pack(anchor=W,pady=(0,2))
+        ttk.Label(card,text="Stored locally in ShikaNet's SQLite database — nothing here "
+                             "is sent anywhere.",
+                  font=(FONT_MONO,7),bootstyle="secondary").pack(anchor=W,pady=(0,10))
 
-        nb2 = ttk.Notebook(f, bootstyle="secondary"); nb2.pack(fill=BOTH, expand=True)
+        nb2 = ttk.Notebook(card, bootstyle="secondary"); nb2.pack(fill=BOTH, expand=True)
 
         # ── General ────────────────────────────────────────────────────────
         gf = ttk.Frame(nb2, padding=(16,12)); nb2.add(gf, text="  General  ")
+        ttk.Label(gf,text="Basic application behavior.",font=(FONT_MONO,7),
+                  bootstyle="secondary").pack(anchor=W,pady=(0,8))
         self._settings_fields = {}
         general_settings = [
-            ("auto_save",     "Auto Save Session Log",    "true",  "checkbox"),
-            ("refresh_rate",  "Dashboard Refresh (sec)",  "30",    "entry"),
-            ("timezone",      "Timezone",                 "UTC",   "entry"),
-            ("default_export","Default Export Folder",    ".",     "folder"),
+            ("auto_save",     "Auto Save Session Log",    "true",  "checkbox", "Automatically save the session log when you disconnect"),
+            ("refresh_rate",  "Dashboard Refresh (sec)",  "30",    "entry",    "How often the Dashboard's cards refresh themselves"),
+            ("timezone",      "Timezone",                 "UTC",   "entry",    "Used when timestamping logs and reports"),
+            ("default_export","Default Export Folder",    ".",     "folder",   "Where CSV/JSON/PDF exports are saved by default"),
         ]
-        for key, label, default, kind in general_settings:
+        for key, label, default, kind, desc in general_settings:
             val = db_get_setting(key, default)
             row = ttk.Frame(gf); row.pack(fill=X, pady=5)
-            ttk.Label(row, text=label, font=(FONT_MONO,9,"bold"),
-                      width=26).pack(side=LEFT)
+            lc = ttk.Frame(row); lc.pack(side=LEFT, anchor=N)
+            ttk.Label(lc, text=label, font=(FONT_MONO,9,"bold"), width=26).pack(anchor=W)
+            ttk.Label(lc, text=desc, font=(FONT_MONO,7), bootstyle="secondary",
+                      width=40, wraplength=320, justify=LEFT).pack(anchor=W)
             if kind == "checkbox":
                 var = tk.BooleanVar(value=(val=="true"))
                 ttk.Checkbutton(row, variable=var, bootstyle="primary").pack(side=LEFT)
@@ -4733,37 +5931,43 @@ class AppV9(App):
 
         # ── SSH ─────────────────────────────────────────────────────────────
         sf = ttk.Frame(nb2, padding=(16,12)); nb2.add(sf, text="  SSH  ")
+        ttk.Label(sf,text="Defaults used when connecting to devices.",font=(FONT_MONO,7),
+                  bootstyle="secondary").pack(anchor=W,pady=(0,8))
         ssh_settings = [
-            ("ssh_timeout",       "Connection Timeout (sec)", "30"),
-            ("ssh_retry",         "Retry Attempts",           "3"),
-            ("ssh_default_user",  "Default Username",         "admin"),
-            ("ssh_default_port",  "Default Port",             "22"),
-            ("ssh_keepalive_sec", "Keepalive Interval (sec)", "90"),
+            ("ssh_timeout",       "Connection Timeout (sec)", "30",    "How long to wait before giving up on a connection attempt"),
+            ("ssh_retry",         "Retry Attempts",           "3",     "How many times to retry a failed connection"),
+            ("ssh_default_user",  "Default Username",         "admin", "Pre-filled username when adding a new device"),
+            ("ssh_default_port",  "Default Port",             "22",    "Pre-filled SSH port when adding a new device"),
+            ("ssh_keepalive_sec", "Keepalive Interval (sec)", "90",    "How often to send a keepalive to stay connected"),
         ]
-        for key, label, default in ssh_settings:
+        for key, label, default, desc in ssh_settings:
             val = db_get_setting(key, default)
             row = ttk.Frame(sf); row.pack(fill=X, pady=5)
-            ttk.Label(row, text=label, font=(FONT_MONO,9,"bold"),
-                      width=28).pack(side=LEFT)
+            lc = ttk.Frame(row); lc.pack(side=LEFT, anchor=N)
+            ttk.Label(lc, text=label, font=(FONT_MONO,9,"bold"), width=28).pack(anchor=W)
+            ttk.Label(lc, text=desc, font=(FONT_MONO,7), bootstyle="secondary",
+                      width=40, wraplength=320, justify=LEFT).pack(anchor=W)
             e = ttk.Entry(row, font=(FONT_MONO,10), width=14); e.insert(0,val)
             e.pack(side=LEFT, ipady=3)
             self._settings_fields[key] = ("str", e)
 
         # ── Alerts ──────────────────────────────────────────────────────────
         af = ttk.Frame(nb2, padding=(16,12)); nb2.add(af, text="  Alerts  ")
+        ttk.Label(af,text="Thresholds and delivery used by the Alerts tab.",font=(FONT_MONO,7),
+                  bootstyle="secondary").pack(anchor=W,pady=(0,8))
         alert_settings = [
-            ("alert_cpu",    "CPU Alert Threshold %",    "80"),
-            ("alert_mem",    "Memory Alert Threshold %", "90"),
-            ("alert_email",  "Alert Email Address",      ""),
-            ("desktop_notif","Desktop Notifications",    "true", "checkbox"),
+            ("alert_cpu",    "CPU Alert Threshold %",    "80", "entry",    "Raise an alert when CPU usage exceeds this"),
+            ("alert_mem",    "Memory Alert Threshold %", "90", "entry",    "Raise an alert when memory usage exceeds this"),
+            ("alert_email",  "Alert Email Address",      "",   "entry",    "Optional — where alert notifications are sent"),
+            ("desktop_notif","Desktop Notifications",    "true","checkbox","Show a desktop popup when a new alert fires"),
         ]
-        for item in alert_settings:
-            key, label, default = item[0], item[1], item[2]
-            kind = item[3] if len(item) > 3 else "entry"
+        for key, label, default, kind, desc in alert_settings:
             val = db_get_setting(key, default)
             row = ttk.Frame(af); row.pack(fill=X, pady=5)
-            ttk.Label(row, text=label, font=(FONT_MONO,9,"bold"),
-                      width=28).pack(side=LEFT)
+            lc = ttk.Frame(row); lc.pack(side=LEFT, anchor=N)
+            ttk.Label(lc, text=label, font=(FONT_MONO,9,"bold"), width=28).pack(anchor=W)
+            ttk.Label(lc, text=desc, font=(FONT_MONO,7), bootstyle="secondary",
+                      width=36, wraplength=300, justify=LEFT).pack(anchor=W)
             if kind == "checkbox":
                 var = tk.BooleanVar(value=(val=="true"))
                 ttk.Checkbutton(row, variable=var, bootstyle="primary").pack(side=LEFT)
@@ -4774,12 +5978,10 @@ class AppV9(App):
                 self._settings_fields[key] = ("str", e)
 
         # Save button
-        ttk.Separator(f, orient=HORIZONTAL).pack(fill=X, pady=(10,8))
-        ttk.Button(f, text="💾 Save All Settings",
+        ttk.Separator(card, orient=HORIZONTAL).pack(fill=X, pady=(10,8))
+        ttk.Button(card, text="💾 Save All Settings",
                    command=self._save_settings,
                    bootstyle="success", width=20).pack(anchor=W)
-        ttk.Label(f, text="Settings are saved to the local SQLite database.",
-                  font=(FONT_MONO,7), bootstyle="secondary").pack(anchor=W, pady=(4,0))
 
     def _save_settings(self):
         for key,(kind,widget) in self._settings_fields.items():
@@ -4794,52 +5996,75 @@ class AppV9(App):
     # TAB — USER MANAGEMENT
     # ══════════════════════════════════════════════════════════════════════
     def _tab_users(self):
-        f = ttk.Frame(self.nb); self.nb.add(f, text="  👤  Users  ")
-        left = ttk.Frame(f, padding=(14,12,8,12), width=320)
+        f = ttk.Frame(self.nb,padding=(10,8)); self.nb.add(f, text="  👤  Users  ")
+        body = ttk.Frame(f); body.pack(fill=BOTH,expand=True)
+        left = ttk.Frame(body, padding=(0,0,6,0), width=330)
         left.pack(side=LEFT, fill=Y); left.pack_propagate(False)
-        self._shdr(left, "USER MANAGEMENT")
-        ttk.Label(left, text=f"Logged in as:  {self._current_user}  ({self._current_role})",
-                  font=(FONT_MONO,9,"bold"), bootstyle="success").pack(anchor=W, pady=(0,10))
+
+        me_card = ttk.Frame(left,bootstyle="dark",padding=(12,10)); me_card.pack(fill=X,pady=(0,8))
+        ttk.Label(me_card, text=f"Logged in as {self._current_user}",
+                  font=(FONT_MONO,9,"bold"), bootstyle="success").pack(anchor=W)
+        ttk.Label(me_card, text=f"Role: {self._current_role}",
+                  font=(FONT_MONO,8), bootstyle="secondary").pack(anchor=W,pady=(2,0))
 
         if self._current_role == "admin":
-            ttk.Separator(left, orient=HORIZONTAL).pack(fill=X, pady=(0,8))
-            ttk.Label(left, text="ADD USER", font=(FONT_MONO,9,"bold"),
+            add_card = ttk.Frame(left,bootstyle="dark",padding=(12,10)); add_card.pack(fill=X,pady=(0,8))
+            ttk.Label(add_card, text="ADD USER", font=(FONT_MONO,9,"bold"),
                       bootstyle="primary").pack(anchor=W, pady=(0,6))
             self._nu_flds = {}
             for lbl,key,show in [("Username","uname",""),("Password","pw","*"),
                                    ("Confirm PW","pw2","*")]:
-                ttk.Label(left,text=lbl,font=(FONT_MONO,8,"bold"),
+                ttk.Label(add_card,text=lbl,font=(FONT_MONO,8,"bold"),
                           bootstyle="secondary").pack(anchor=W,pady=(4,0))
-                e=ttk.Entry(left,font=(FONT_MONO,10),show=show)
+                e=ttk.Entry(add_card,font=(FONT_MONO,10),show=show)
                 e.pack(fill=X,ipady=3,pady=(2,0)); self._nu_flds[key]=e
-            ttk.Label(left,text="Role",font=(FONT_MONO,8,"bold"),
+            ttk.Label(add_card,text="Role",font=(FONT_MONO,8,"bold"),
                       bootstyle="secondary").pack(anchor=W,pady=(6,0))
             self._nu_role=tk.StringVar(value="operator")
-            rr=ttk.Frame(left); rr.pack(anchor=W,pady=(2,8))
+            rr=ttk.Frame(add_card); rr.pack(anchor=W,pady=(2,8))
             for r in ["admin","operator","readonly"]:
                 ttk.Radiobutton(rr,text=r.capitalize(),variable=self._nu_role,
                                 value=r,bootstyle="primary").pack(side=LEFT,padx=4)
-            ttk.Button(left,text="➕ Add User",command=self._add_user,
+            ttk.Button(add_card,text="➕ Add User",command=self._add_user,
                        bootstyle="success").pack(fill=X,pady=3)
 
-        ttk.Separator(left,orient=HORIZONTAL).pack(fill=X,pady=(10,8))
-        ttk.Label(left,text="CHANGE MY PASSWORD",font=(FONT_MONO,9,"bold"),
+        pw_card = ttk.Frame(left,bootstyle="dark",padding=(12,10)); pw_card.pack(fill=X)
+        ttk.Label(pw_card,text="CHANGE MY PASSWORD",font=(FONT_MONO,9,"bold"),
                   bootstyle="warning").pack(anchor=W,pady=(0,6))
         self._cp_flds={}
         for lbl,key in [("Current PW","old"),("New PW","new"),("Confirm","conf")]:
-            ttk.Label(left,text=lbl,font=(FONT_MONO,8,"bold"),
+            ttk.Label(pw_card,text=lbl,font=(FONT_MONO,8,"bold"),
                       bootstyle="secondary").pack(anchor=W,pady=(4,0))
-            e=ttk.Entry(left,font=(FONT_MONO,10),show="*")
+            e=ttk.Entry(pw_card,font=(FONT_MONO,10),show="*")
             e.pack(fill=X,ipady=3,pady=(2,0)); self._cp_flds[key]=e
-        ttk.Button(left,text="🔑 Change Password",command=self._change_pw,
+        ttk.Button(pw_card,text="🔑 Change Password",command=self._change_pw,
                    bootstyle="warning").pack(fill=X,pady=(8,0))
+        ttk.Label(pw_card,text="ShikaNet doesn't currently support logging out or "
+                                "switching users mid-session — close and reopen the "
+                                "app to sign in as someone else.",
+                  font=(FONT_MONO,7),bootstyle="secondary",wraplength=290,
+                  justify=LEFT).pack(anchor=W,pady=(8,0))
 
-        ttk.Separator(f,orient=VERTICAL).pack(side=LEFT,fill=Y,padx=4)
-        r=ttk.Frame(f,padding=(12,10)); r.pack(side=LEFT,fill=BOTH,expand=True)
-        self._shdr(r,"ALL USERS")
-        self.users_out=self._mkbox(r)
-        ttk.Button(r,text="🔄 Refresh User List",command=self._refresh_users,
-                   bootstyle="secondary-outline").pack(anchor=W,pady=(8,0))
+        r=ttk.Frame(body,padding=(6,0,0,0)); r.pack(side=LEFT,fill=BOTH,expand=True)
+        rcard=ttk.Frame(r,bootstyle="dark",padding=(12,10)); rcard.pack(fill=BOTH,expand=True)
+        rh=ttk.Frame(rcard); rh.pack(fill=X,pady=(0,6))
+        ttk.Label(rh,text="ALL USERS",font=(FONT_MONO,9,"bold"),bootstyle="light").pack(side=LEFT)
+        ttk.Button(rh,text="🔄 Refresh",command=self._refresh_users,
+                   bootstyle="secondary-outline",width=10).pack(side=RIGHT)
+        cols=("role","status")
+        self.users_tree=ttk.Treeview(rcard,columns=cols,show="tree headings",
+                                      height=14,bootstyle="dark")
+        self.users_tree.heading("#0",text="Username")
+        self.users_tree.heading("role",text="Role")
+        self.users_tree.heading("status",text="Status")
+        self.users_tree.column("#0",width=220,stretch=True)
+        self.users_tree.column("role",width=120,stretch=False)
+        self.users_tree.column("status",width=100,stretch=False)
+        usc=ttk.Scrollbar(rcard,orient=VERTICAL,command=self.users_tree.yview,
+                           bootstyle="secondary-round")
+        self.users_tree.configure(yscrollcommand=usc.set)
+        self.users_tree.pack(side=LEFT,fill=BOTH,expand=True)
+        usc.pack(side=RIGHT,fill=Y)
         self._refresh_users()
 
     def _add_user(self):
@@ -4870,24 +6095,31 @@ class AppV9(App):
         messagebox.showinfo("Changed","Password changed successfully.")
 
     def _refresh_users(self):
-        self._clr(self.users_out)
+        if not hasattr(self, "users_tree"):
+            return
+        self.users_tree.delete(*self.users_tree.get_children())
         for u in db_get_users():
-            active = "✔ Active" if u["active"] else "✘ Inactive"
-            role_tag = "ok" if u["role"]=="admin" else "wrn" if u["role"]=="operator" else "inf"
-            self._write(self.users_out,
-                        f"  {u['username']:20s}  {u['role']:10s}  {active}\n", role_tag)
+            status = "✔ Active" if u["active"] else "✘ Inactive"
+            tag = "admin" if u["role"]=="admin" else "operator" if u["role"]=="operator" else "readonly"
+            self.users_tree.insert("", "end", text=u["username"],
+                                    values=(u["role"], status), tags=(tag,))
+        self.users_tree.tag_configure("admin", foreground=TERM_GRN)
+        self.users_tree.tag_configure("operator", foreground=TERM_YLW)
+        self.users_tree.tag_configure("readonly", foreground=TERM_BLU)
 
 
     # ══════════════════════════════════════════════════════════════════════
     # TAB — HELP  (Fix 9)
     # ══════════════════════════════════════════════════════════════════════
     def _tab_help(self):
-        f = ttk.Frame(self.nb); self.nb.add(f, text="  ❓  Help  ")
-        top = ttk.Frame(f, padding=(14, 10)); top.pack(fill=X)
-        self._shdr(top, "IN-APP HELP & REFERENCE")
+        f = ttk.Frame(self.nb,padding=(10,8)); self.nb.add(f, text="  ❓  Help  ")
+        top = ttk.Frame(f, bootstyle="dark", padding=(12,10)); top.pack(fill=X,pady=(0,8))
+        ttk.Label(top, text="IN-APP HELP & REFERENCE", font=(FONT_MONO,9,"bold"),
+                  bootstyle="light").pack(anchor=W,pady=(0,2))
         ttk.Label(top,
-                  text="Click a category to read about it, or use the search box below.",
-                  font=(FONT_MONO, 8), bootstyle="secondary").pack(anchor=W, pady=(0, 6))
+                  text="Click a category to read about it, or use the search box below "
+                       "the content panel.",
+                  font=(FONT_MONO,7), bootstyle="secondary").pack(anchor=W, pady=(0,8))
 
         self._help_sections = {
             "Getting Started": (
@@ -4976,19 +6208,28 @@ class AppV9(App):
                 "Restore: Backup tab → select a file → Restore Config.\n"
                 "Config Diff: compare two saved configs or pull live configs side-by-side.\n"
             ),
+            "About": (
+                f"ABOUT SHIKANET\n"
+                f"══════════════\n"
+                f"Version {APP_VERSION}\n"
+                f"Supported platforms: Cisco IOS · IOS-XE · NX-OS · Juniper · Arista\n\n"
+                f"ShikaNet is a desktop network-automation and device-management tool "
+                f"built on Tkinter/ttkbootstrap with Netmiko for SSH connectivity.\n\n"
+                f"For the full tab-by-tab feature list, open Help (menu) → About / "
+                f"Shortcuts from the menu bar.\n"
+            ),
         }
 
-        cats = ttk.Frame(top); cats.pack(fill=X, pady=(0, 6))
+        cats = ttk.Frame(top); cats.pack(fill=X, pady=(0, 2))
         for cat in self._help_sections:
             ttk.Button(cats, text=cat,
                        command=lambda c=cat: self._help_show(c),
                        bootstyle="secondary-outline", width=16).pack(side=LEFT, padx=3, pady=2)
 
-        ttk.Separator(f, orient=HORIZONTAL).pack(fill=X)
-        r = ttk.Frame(f, padding=(8, 8)); r.pack(fill=BOTH, expand=True)
-        self._hdr(r, "HELP CONTENT")
-        self.help_out = self._mkbox(r)
-        self._search(r, self.help_out)
+        rcard = ttk.Frame(f, bootstyle="dark", padding=(12,10)); rcard.pack(fill=BOTH, expand=True)
+        self._shdr(rcard, "HELP CONTENT")
+        self.help_out = self._mkbox(rcard)
+        self._search(rcard, self.help_out)
         self.root.after(300, lambda: self._help_show("Getting Started"))
 
     def _help_show(self, category):
