@@ -8,6 +8,9 @@ import tkinter as tk
 from tkinter import messagebox, filedialog, scrolledtext
 import threading, json, csv, re, smtplib, os, base64
 import hashlib, shutil, time, difflib, subprocess, sys
+import ast
+import sqlite3
+from threading import Event as TEvent, RLock
 from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -19,6 +22,13 @@ from netmiko.exceptions import NetmikoTimeoutException, NetmikoAuthenticationExc
 from cryptography.fernet import Fernet
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
+from security import (
+    encrypt as protect_secret, decrypt as reveal_secret, password_hash,
+    password_matches, protect_record, reveal_record, require_role,
+    authorize, migrate_json, secret_fields, is_encrypted, read_artifact,
+    write_artifact, encrypt_artifact, decrypt_artifact,
+)
+from device_deletion import delete_device
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONSTANTS
@@ -39,7 +49,7 @@ MAX_LINES       = 2000
 KEEPALIVE_SEC   = 90
 FONT_MONO       = "Courier New"
 DARKLY_BG       = "#222222"
-_KEY_SEED       = b"NetworkToolV8_Key_DoNotShare_2025"
+_AUDIT_LOCK     = RLock()
 
 THEMES = ["darkly","cyborg","superhero","solar","vapor","flatly","litera","journal"]
 
@@ -542,11 +552,88 @@ def gen(key, vals):
     try:    return [l.format(**vals) for l in CFG.get(key,[])]
     except KeyError as e: return [f"! ERROR: missing {e}"]
 
+
+class PluginSecurityError(PermissionError):
+    """Raised when plugin code requests an operation outside its safe API."""
+
+
+class _PluginValidator(ast.NodeVisitor):
+    _allowed = {
+        ast.Module, ast.Expr, ast.Assign, ast.Name, ast.Load, ast.Store,
+        ast.Constant, ast.List, ast.Tuple, ast.Dict, ast.Call, ast.keyword,
+        ast.Attribute, ast.For, ast.comprehension,
+    }
+    _names = {"plugin", "item", "items", "result"}
+    _methods = {"send", "write", "push_config", "device_names", "current_device"}
+
+    def generic_visit(self, node):
+        if type(node) not in self._allowed:
+            raise PluginSecurityError(
+                f"Plugin syntax is not permitted: {type(node).__name__}"
+            )
+        super().generic_visit(node)
+
+    def visit_Name(self, node):
+        if node.id not in self._names:
+            raise PluginSecurityError(f"Plugin name is not permitted: {node.id}")
+
+    def visit_Attribute(self, node):
+        if (not isinstance(node.value, ast.Name)
+                or node.value.id != "plugin"
+                or node.attr not in self._methods
+                or node.attr.startswith("_")):
+            raise PluginSecurityError("Plugin attribute is not permitted")
+        self.generic_visit(node.value)
+
+
+class _PluginContext:
+    __slots__ = ("_send", "_write", "_push", "_role", "_names", "_current")
+
+    def __init__(self, send, write, push, role, names, current):
+        self._send = send
+        self._write = write
+        self._push = push
+        self._role = role
+        self._names = tuple(names)
+        self._current = current
+
+    def send(self, command):
+        if not isinstance(command, str):
+            raise PluginSecurityError("Plugin commands must be text")
+        command = command.strip()
+        if not command or not re.match(
+            r"^(show|ping|traceroute|terminal length 0|where|display)\b",
+            command, re.IGNORECASE,
+        ):
+            raise PluginSecurityError("Only approved read-only commands are allowed")
+        return self._send(command)
+
+    def write(self, text):
+        self._write(str(text))
+
+    def push_config(self, lines):
+        if not authorize(self._role, "operator"):
+            raise PluginSecurityError("operator role required for configuration changes")
+        if isinstance(lines, str):
+            lines = lines.splitlines()
+        if not isinstance(lines, (list, tuple)) or not all(
+            isinstance(line, str) for line in lines
+        ):
+            raise PluginSecurityError("Configuration must be a sequence of text lines")
+        return self._push(lines)
+
+    def device_names(self):
+        return tuple(self._names)
+
+    def current_device(self):
+        return self._current
+
 # ─────────────────────────────────────────────────────────────────────────────
 # ENCRYPTION
 # ─────────────────────────────────────────────────────────────────────────────
 def _cipher():
-    return Fernet(base64.urlsafe_b64encode(hashlib.sha256(_KEY_SEED).digest()))
+    from security import cipher
+    return cipher()
 
 def enc_save(path, data):
     with open(path,"wb") as f: f.write(_cipher().encrypt(json.dumps(data,indent=2).encode()))
@@ -554,7 +641,10 @@ def enc_save(path, data):
 def enc_load(path, warn=False):
     if not os.path.exists(path): return {}
     try:
-        with open(path,"rb") as f: return json.loads(_cipher().decrypt(f.read()).decode())
+        data, migrated = migrate_json(path)
+        if migrated:
+            audit_log({"action": "migrate_credentials", "detail": os.path.basename(path)})
+        return data
     except Exception as _enc_err:
         if warn:
             import tkinter.messagebox as _mb
@@ -570,6 +660,31 @@ def enc_load(path, warn=False):
                 pass  # GUI not ready yet — fail silently
         return {}
 
+def missing_device_credentials(device):
+    """Return a safe validation message before any device authentication."""
+    username = str(device.get("username", "") or "").strip()
+    password = str(device.get("password", "") or "").strip()
+    key_file = str(device.get("key_file", "") or "").strip()
+    console_ap = str(device.get("console_ap_host", "") or "").strip()
+    jump_host = str(device.get("jump_host", "") or "").strip()
+
+    if console_ap:
+        if not str(device.get("console_ap_user", "") or "").strip():
+            return "Console AP username is not configured."
+        if not str(device.get("console_ap_pass", "") or "").strip():
+            return "Console AP password is not configured."
+    elif jump_host:
+        if not str(device.get("jump_username", "") or "").strip():
+            return "Jump-host username is not configured."
+        if not str(device.get("jump_password", "") or "").strip():
+            return "Jump-host password is not configured."
+
+    if not username:
+        return "Device username is not configured."
+    if not password and not key_file:
+        return "Device password or SSH key is not configured."
+    return ""
+
 # ─────────────────────────────────────────────────────────────────────────────
 # FILE HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
@@ -578,38 +693,89 @@ STS = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 def sn(s): return re.sub(r'[^\w\-]','_',s)
 
 def log_save(dev, cmd, out):
-    fn = f"{sn(dev)}_{STS}.txt"
-    with open(fn,"a",encoding="utf-8") as f:
-        f.write(f"[{datetime.now():%H:%M:%S}] {cmd}\n{out}\n{'='*50}\n")
+    fn = f"{sn(dev)}_{STS}.txt.enc"
+    previous = read_artifact(fn) if os.path.exists(fn) else b""
+    text = previous.decode("utf-8", errors="replace")
+    text += f"[{datetime.now():%H:%M:%S}] {cmd}\n{out}\n{'='*50}\n"
+    write_artifact(fn, text.encode("utf-8"))
     return fn
 
+
+def session_log_path(dev):
+    """Return the current log path, preferring encrypted storage."""
+    encrypted = f"{sn(dev)}_{STS}.txt.enc"
+    legacy = f"{sn(dev)}_{STS}.txt"
+    if os.path.exists(encrypted):
+        return encrypted
+    if os.path.exists(legacy):
+        return legacy
+    return None
+
+
+def session_log_bytes(dev):
+    """Read a session log while migrating any legacy plaintext source."""
+    path = session_log_path(dev)
+    if not path:
+        return None
+    return read_artifact(path)
+
 def to_json(dev, entries):
-    fn=f"{sn(dev)}_{STS}.json"
-    with open(fn,"w",encoding="utf-8") as f: json.dump(entries,f,indent=2)
+    fn=f"{sn(dev)}_{STS}.json.enc"
+    write_artifact(fn, json.dumps(entries, indent=2).encode("utf-8"))
     return fn
 
 def to_csv(dev, entries):
-    fn=f"{sn(dev)}_{STS}.csv"
-    with open(fn,"w",newline="",encoding="utf-8") as f:
-        w=csv.DictWriter(f,fieldnames=["timestamp","command","output"])
+    fn=f"{sn(dev)}_{STS}.csv.enc"
+    output = __import__("io").StringIO(newline="")
+    with output:
+        w=csv.DictWriter(output,fieldnames=["timestamp","command","output"])
         w.writeheader(); w.writerows(entries)
+    write_artifact(fn, output.getvalue().encode("utf-8"))
     return fn
 
 def backup_save(dev, text, btype="running"):
     os.makedirs(BACKUP_DIR,exist_ok=True)
-    fn=os.path.join(BACKUP_DIR,f"{sn(dev)}_{btype}_{datetime.now():%Y-%m-%d_%H-%M-%S}.txt")
-    with open(fn,"w",encoding="utf-8") as f: f.write(text)
+    fn=os.path.join(BACKUP_DIR,f"{sn(dev)}_{btype}_{datetime.now():%Y-%m-%d_%H-%M-%S}.txt.enc")
+    write_artifact(fn, text.encode("utf-8"))
     return fn
 
-def audit_log(entry):
-    recs=[]
-    if os.path.exists(AUDIT_FILE):
+def artifact_text(path):
+    return read_artifact(path).decode("utf-8", errors="replace")
+
+def migrate_legacy_artifacts():
+    """Best-effort startup migration; failed conversions retain originals."""
+    candidates = []
+    managed = {DEVICES_FILE, EMAIL_CFG_FILE, SCHED_FILE, AUDIT_FILE}
+    for folder in (".", BACKUP_DIR):
+        if not os.path.isdir(folder):
+            continue
+        for name in os.listdir(folder):
+            path = os.path.join(folder, name)
+            if (os.path.isfile(path) and name not in managed and
+                    os.path.splitext(name)[1].lower() in
+                    {".txt", ".json", ".csv", ".html", ".pdf"} and
+                    not name.endswith(".enc")):
+                candidates.append(path)
+    for path in candidates:
         try:
-            with open(AUDIT_FILE,encoding="utf-8") as f: recs=json.load(f)
-        except: recs=[]
-    recs.append({**entry,"ts":datetime.now().isoformat()})
-    recs=recs[-10000:]
-    with open(AUDIT_FILE,"w",encoding="utf-8") as f: json.dump(recs,f,indent=2)
+            read_artifact(path)
+        except Exception:
+            continue
+
+def audit_log(entry):
+    with _AUDIT_LOCK:
+        recs=[]
+        if os.path.exists(AUDIT_FILE):
+            try:
+                with open(AUDIT_FILE,encoding="utf-8") as f: recs=json.load(f)
+            except (OSError, ValueError, TypeError): recs=[]
+        recs.append({**entry,"ts":datetime.now().isoformat()})
+        recs=recs[-10000:]
+        temp = AUDIT_FILE + ".tmp"
+        with open(temp,"w",encoding="utf-8") as f:
+            json.dump(recs,f,indent=2)
+            f.flush(); os.fsync(f.fileno())
+        os.replace(temp, AUDIT_FILE)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1197,8 +1363,20 @@ class App:
         self._diff_b       = ""
         self._all_boxes    = []            # every output Text widget
         self._sched_thread = None
-
         self._splash_and_load()
+
+    def _ensure_role(self, minimum="operator"):
+        role = getattr(self, "_current_role", getattr(self, "role", None))
+        if authorize(role, minimum):
+            return True
+        audit_log({"user": getattr(self, "_current_user", "unknown"),
+                   "action": "authorization_denied", "detail": minimum})
+        try:
+            messagebox.showerror("Access denied",
+                                 f"{minimum.title()} role required.")
+        except Exception:
+            pass
+        return False
 
     # ─── SPLASH ──────────────────────────────────────────────────────────────
     def _splash_and_load(self):
@@ -1220,19 +1398,7 @@ class App:
         self._start_uptime()
 
     def _load_devices(self):
-        base = {
-            "R1 (Router)": {
-                "device_type":"cisco_ios","host":"devnetsandboxiosxec8k.cisco.com",
-                "username":"","password":"",
-                "port":22,"fast_cli":False,"key_file":"",
-                "jump_host":"","jump_username":"","jump_password":"",
-                "jump_port":22,"jump_device_type":"cisco_ios",
-                "console_ap_host":"","console_ap_user":"","console_ap_pass":"",
-                "console_cmd":"telnet 0","console_dev_pass":"",
-            }
-        }
-        base.update(enc_load(DEVICES_FILE, warn=True))
-        self.devices = base
+        self.devices = enc_load(DEVICES_FILE, warn=True)
 
     def _load_email(self):
         self._email_cfg = enc_load(EMAIL_CFG_FILE)
@@ -2570,6 +2736,10 @@ class App:
         name=self.dev_var.get()
         if not name or name not in self.devices:
             messagebox.showwarning("No Device","Select or add a device first."); return
+        missing = missing_device_credentials(self.devices[name])
+        if missing:
+            messagebox.showwarning("Credentials Required", missing)
+            return
         self._setbar(f"Connecting to {name}…")
         self.btn_conn.config(state=DISABLED,text="Connecting…")
         self._write(self.cmd_out,f"\nConnecting to {name}…\n","inf")
@@ -2577,12 +2747,18 @@ class App:
 
     def _conn_worker(self, name):
         d=dict(self.devices[name])
+        missing = missing_device_credentials(d)
+        if missing:
+            self.root.after(0, lambda: self._conn_err(missing))
+            return
         JK={"jump_host","jump_username","jump_password","jump_port","jump_device_type",
             "console_ap_host","console_ap_user","console_ap_pass","console_cmd","console_dev_pass"}
         cfg={k:v for k,v in d.items() if k not in JK}
         if not cfg.get("key_file"): cfg.pop("key_file",None)
         jump   = d.get("jump_host","").strip()
         con_ap = d.get("console_ap_host","").strip()
+        transient = None
+        adopted = False
         try:
             if con_ap:
                 # ── Console via AP path ────────────────────────────────────
@@ -2592,6 +2768,7 @@ class App:
                         "host":con_ap,"username":d.get("console_ap_user",""),
                         "password":d.get("console_ap_pass",""),"port":22,"fast_cli":False}
                 with self._lock: ap=ConnectHandler(**ap_cfg)
+                transient = ap
                 # Send console command (e.g. "telnet 0" or "ssh -l admin 192.168.1.5")
                 con_cmd=d.get("console_cmd","telnet 0")
                 self.root.after(0,lambda:self._write(self.cmd_out,
@@ -2604,6 +2781,7 @@ class App:
                 # Redispatch so Netmiko understands the new session type
                 redispatch(ap,device_type=cfg["device_type"])
                 with self._lock: self.conn=ap; self.current=name
+                adopted = True
             elif jump:
                 # ── SSH Jump host path ─────────────────────────────────────
                 self.root.after(0,lambda:self._write(self.cmd_out,
@@ -2613,6 +2791,7 @@ class App:
                       "password":d.get("jump_password",""),
                       "port":d.get("jump_port",22),"fast_cli":False}
                 with self._lock: jc=ConnectHandler(**jcfg)
+                transient = jc
                 self.root.after(0,lambda:self._write(self.cmd_out,
                     f"  Jump host: hopping to {cfg['host']}…\n","wrn"))
                 jc.send_command_timing(
@@ -2621,10 +2800,12 @@ class App:
                 jc.send_command_timing(cfg.get("password",""),read_timeout=10)
                 redispatch(jc,device_type=cfg["device_type"])
                 with self._lock: self.conn=jc; self.current=name
+                adopted = True
             else:
                 # ── Direct SSH path ────────────────────────────────────────
                 with self._lock:
                     self.conn=ConnectHandler(**cfg); self.current=name
+                adopted = True
             self.root.after(0,lambda:self._on_connected(name))
         except NetmikoAuthenticationException:
             self.root.after(0,lambda:self._conn_err("Authentication failed — check credentials."))
@@ -2632,6 +2813,12 @@ class App:
             self.root.after(0,lambda:self._conn_err("Connection timed out — check host/port."))
         except Exception as e:
             self.root.after(0,lambda:self._conn_err(str(e)))
+        finally:
+            if transient is not None and not adopted:
+                try:
+                    transient.disconnect()
+                except Exception:
+                    pass
 
     def _on_connected(self, name):
         d=self.devices.get(name,{})
@@ -2689,12 +2876,22 @@ class App:
         name=self.dev_var.get()
         if not name or name not in self.devices:
             messagebox.showwarning("No Device","Select a device first."); return
+        missing = missing_device_credentials(self.devices[name])
+        if missing:
+            messagebox.showwarning("Credentials Required", missing)
+            return
         self._setbar(f"Testing {name}…")
         self.btn_test.config(state=DISABLED,text="Testing…")
         threading.Thread(target=self._test_worker,args=(name,),daemon=True).start()
 
     def _test_worker(self, name):
         d=dict(self.devices[name])
+        missing = missing_device_credentials(d)
+        if missing:
+            self.root.after(0,lambda:(
+                messagebox.showwarning("Credentials Required", missing),
+                self.btn_test.config(state=NORMAL,text="🔍 Test")))
+            return
         JK={"jump_host","jump_username","jump_password","jump_port","jump_device_type",
             "console_ap_host","console_ap_user","console_ap_pass","console_cmd","console_dev_pass"}
         cfg={k:v for k,v in d.items() if k not in JK}
@@ -2739,6 +2936,8 @@ class App:
 
     def _push_cfg(self, lines):
         """Thread-safe config push. Returns output string."""
+        if not self._ensure_role("operator"):
+            return "[ERROR] Authorization denied"
         with self._lock:
             if not self.conn: return "[ERROR] Not connected"
             try:    return self.conn.send_config_set(lines,read_timeout=30)
@@ -2810,6 +3009,8 @@ class App:
     # CUSTOM CLI + HISTORY
     # ═════════════════════════════════════════════════════════════════════════
     def _run_cli(self):
+        if not self._ensure_role("operator"):
+            return
         if not self._req(): return
         raw=self.cli_in.get("1.0","end").strip()
         cmds=[l.strip() for l in raw.splitlines() if l.strip()]
@@ -3240,7 +3441,8 @@ class App:
     def _ref_baklist(self):
         self.bak_lb.delete(0,"end")
         if not os.path.isdir(BACKUP_DIR): return
-        for fn in sorted([f for f in os.listdir(BACKUP_DIR) if f.endswith(".txt")],reverse=True):
+        for fn in sorted([f for f in os.listdir(BACKUP_DIR)
+                          if f.endswith((".txt", ".txt.enc"))], reverse=True):
             self.bak_lb.insert("end",fn)
 
     def _bak_preview(self, _=None):
@@ -3248,7 +3450,7 @@ class App:
         if not sel: return
         fn=os.path.join(BACKUP_DIR,self.bak_lb.get(sel[0]))
         try:
-            with open(fn,encoding="utf-8") as f: content=f.read()
+            content=artifact_text(fn)
             self._clr(self.bak_out); self._write(self.bak_out,content)
         except Exception as e:
             self._write(self.bak_out,f"\n[ERROR] {e}\n","err")
@@ -3259,18 +3461,19 @@ class App:
         except: subprocess.Popen(["xdg-open",path])
 
     def _restore_cfg(self):
+        if not self._ensure_role("admin"): return
         if not self._req(): return
         fn=filedialog.askopenfilename(
             title="Select Config to Restore",
             initialdir=BACKUP_DIR if os.path.isdir(BACKUP_DIR) else ".",
-            filetypes=[("Text","*.txt"),("All","*.*")])
+            filetypes=[("Encrypted config","*.txt.enc"),("All","*.*")])
         if not fn: return
         if not messagebox.askyesno("Confirm Restore",
             f"Push this config to {self.current}?\n\n{os.path.basename(fn)}\n\n"
             "This will overwrite the running configuration."): return
         def work():
             try:
-                with open(fn,encoding="utf-8") as f: lines=f.read().splitlines()
+                lines=artifact_text(fn).splitlines()
                 lines=[l for l in lines if l.strip() and not l.startswith("!")
                        and not l.startswith("Building") and not l.startswith("Current")]
                 out=self._push_cfg(lines)
@@ -3295,6 +3498,11 @@ class App:
         _total = len(self.devices); _done = 0
         self.root.after(0, lambda: self._setbar(f"Batch backup: 0 / {_total} devices…"))
         for name,d in self.devices.items():
+            missing = missing_device_credentials(d)
+            if missing:
+                self.root.after(0, lambda n=name, msg=missing:
+                    self._write(self.bak_out, f"✘ {n}: {msg}\n", "err"))
+                continue
             cfg={k:v for k,v in d.items() if k not in JK}
             if not cfg.get("key_file"): cfg.pop("key_file",None)
             try:
@@ -3374,7 +3582,7 @@ class App:
         fn=filedialog.askopenfilename(title=f"Load Config {slot}",
                                       filetypes=[("Text","*.txt"),("All","*.*")])
         if not fn: return
-        with open(fn,encoding="utf-8",errors="replace") as f: content=f.read()
+        content=artifact_text(fn)
         if slot=="A":
             self._diff_a=content
             self.diff_a_lbl.config(text=f"A: {os.path.basename(fn)}")
@@ -3423,6 +3631,7 @@ class App:
             self._multi_update_selcount()
 
     def _run_multi(self):
+        if not self._ensure_role("operator"): return
         sel=self.multi_lb.curselection()
         if not sel: messagebox.showwarning("No Selection","Select at least one device."); return
         names=[self.multi_lb.get(i) for i in sel]
@@ -3445,6 +3654,16 @@ class App:
         threading.Thread(target=self._multi_worker,args=(names,op,raw),daemon=True).start()
 
     def _multi_worker(self, names, op, raw):
+        # Keep the worker safe even when invoked without the GUI entry point.
+        if op == "Push Config" and not authorize(
+            getattr(self, "_current_role", None), "operator"
+        ):
+            audit_log({
+                "user": getattr(self, "_current_user", "unknown"),
+                "action": "authorization_denied",
+                "detail": "multi_Push Config",
+            })
+            return
         JK={"jump_host","jump_username","jump_password","jump_port","jump_device_type",
             "console_ap_host","console_ap_user","console_ap_pass","console_cmd","console_dev_pass"}
         _total = len(names); _done = 0
@@ -3454,6 +3673,11 @@ class App:
                 self._write(self.multi_out, f"\n▶ [{d}/{t}] {n}\n", "hdr"),
                 self._setbar(f"{op}: {d} / {t} — {n}")))
             d=dict(self.devices[name])
+            missing = missing_device_credentials(d)
+            if missing:
+                self.root.after(0, lambda n=name, msg=missing:
+                    self._write(self.multi_out, f"✘ {n}: {msg}\n", "err"))
+                continue
             cfg={k:v for k,v in d.items() if k not in JK}
             if not cfg.get("key_file"): cfg.pop("key_file",None)
             try:
@@ -3517,6 +3741,11 @@ class App:
         JK={"jump_host","jump_username","jump_password","jump_port","jump_device_type",
             "console_ap_host","console_ap_user","console_ap_pass","console_cmd","console_dev_pass"}
         for name,d in self.devices.items():
+            missing = missing_device_credentials(d)
+            if missing:
+                self.root.after(0, lambda n=name, msg=missing:
+                    self._write(self.inv_out, f"✘ {n}: {msg}\n", "err"))
+                continue
             cfg={k:v for k,v in d.items() if k not in JK}
             if not cfg.get("key_file"): cfg.pop("key_file",None)
             self.root.after(0,lambda n=name:self._write(self.inv_out,f"\n▶ Connecting to {n}…\n","wrn"))
@@ -3555,14 +3784,18 @@ class App:
                                         initialfile="network_inventory.csv",
                                         filetypes=[("CSV","*.csv")])
         if not fn: return
-        with open(fn,"w",newline="",encoding="utf-8") as f:
-            w=csv.writer(f)
+        import io
+        output = io.StringIO(newline="")
+        with output:
+            w=csv.writer(output)
             w.writerow(["Device","Timestamp","Command","Output"])
             for dev,data in self._inv_data.items():
                 ts=data.get("timestamp","")
                 for cmd in INVENTORY_CMDS:
                     out=data.get(cmd,"")
                     w.writerow([dev,ts,cmd,out[:2000]])
+        if not fn.endswith(".enc"): fn += ".enc"
+        write_artifact(fn, output.getvalue().encode("utf-8"))
         messagebox.showinfo("Exported",f"Inventory saved:\n{fn}")
 
     # ═════════════════════════════════════════════════════════════════════════
@@ -3646,15 +3879,17 @@ class App:
             msg.attach(MIMEText(body,"plain"))
             atts=[]
             if self.att_log.get() and self.current:
-                fn=f"{sn(self.current)}_{STS}.txt"
-                if os.path.exists(fn): atts.append(fn)
+                log_data = session_log_bytes(self.current)
+                if log_data is not None:
+                    atts.append((f"{sn(self.current)}_{STS}.txt", log_data))
             if self.att_json.get() and self.log:
-                atts.append(to_json(self.current or "report",self.log))
-            for fp in atts:
+                fp = to_json(self.current or "report",self.log)
                 with open(fp,"rb") as fl:
-                    p=MIMEBase("application","octet-stream"); p.set_payload(fl.read())
+                    atts.append((os.path.basename(fp), fl.read()))
+            for filename, payload in atts:
+                p=MIMEBase("application","octet-stream"); p.set_payload(payload)
                 encoders.encode_base64(p)
-                p.add_header("Content-Disposition",f"attachment; filename={os.path.basename(fp)}")
+                p.add_header("Content-Disposition",f"attachment; filename={filename}")
                 msg.attach(p)
             srv=smtplib.SMTP(f["smtp"],int(f["port"])); srv.starttls()
             if f.get("pass"): srv.login(f["user"],f["pass"])
@@ -3749,6 +3984,7 @@ class App:
             self._write(self.dev_det,"Connection  : Direct SSH\n","inf")
 
     def _dev_add(self):
+        if not self._ensure_role("admin"): return
         dlg=DeviceDlg(self.root,title="Add Device")
         self.root.wait_window(dlg)
         if dlg.result:
@@ -3760,6 +3996,7 @@ class App:
             self._dev_autosave()
 
     def _dev_edit(self):
+        if not self._ensure_role("admin"): return
         sel=self.dev_lb.curselection()
         if not sel: messagebox.showinfo("No Selection","Select a device to edit."); return
         old=self.dev_lb.get(sel[0]); pf=dict(self.devices[old]); pf["_name"]=old
@@ -3767,21 +4004,50 @@ class App:
         self.root.wait_window(dlg)
         if dlg.result:
             r=dlg.result; new=r.pop("_name")
+            if old != new:
+                try:
+                    with db_conn() as c:
+                        c.execute("DELETE FROM devices WHERE name=?", (old,))
+                except sqlite3.Error:
+                    messagebox.showerror("Edit Device", "The previous device could not be removed.")
+                    return
             del self.devices[old]; self.devices[new]=r
             self._dev_refresh(); self._setbar(f"Updated → '{new}'.")
             self._dev_autosave()
 
     def _dev_rm(self):
+        if not self._ensure_role("admin"): return
         sel=self.dev_lb.curselection()
         if not sel: messagebox.showinfo("No Selection","Select a device to remove."); return
         name=self.dev_lb.get(sel[0])
         if messagebox.askyesno(
             "Remove Device",
             f"Remove '{name}' from your device list?\n\n"
-            f"This only deletes it from ShikaNet's saved device list — it does not "
+            f"This removes its saved identity and ShikaNet-owned historical data; it does not "
             f"change anything on the physical device. This cannot be undone here."):
+            result = delete_device(name, db_path=DB_FILE, root_dir=os.getcwd(),
+                                   backup_dir=BACKUP_DIR, scheduled_file=SCHED_FILE)
+            if not result.db_committed:
+                self._setbar("Device removal failed; nothing was changed.")
+                messagebox.showerror("Remove Device", "The device could not be removed.")
+                return
+            if self.current == name:
+                self._disconnect()
+                self.current = None
             del self.devices[name]; self._dev_refresh()
-            self._clr(self.dev_det); self._setbar(f"'{name}' removed.")
+            self._dev_autosave()
+            audit_log({"user": getattr(self, "_current_user", "unknown"),
+                       "device": name, "action": "delete_device",
+                       "status": result.status})
+            self._clr(self.dev_det)
+            if result.complete:
+                self._setbar(f"'{name}' removed.")
+            else:
+                self._setbar(f"'{name}' removed; cleanup pending.")
+                messagebox.showwarning(
+                    "Cleanup Pending",
+                    "The device was removed from the database, but some files "
+                    "could not be deleted. Cleanup will need to be retried.")
 
     def _dev_autosave(self):
         """Silently persist devices to disk after every add/edit (no popup)."""
@@ -3790,11 +4056,15 @@ class App:
             to_save = {k: {kk: vv for kk, vv in v.items() if kk not in sk}
                        for k, v in self.devices.items()}
             enc_save(DEVICES_FILE, to_save)
+            for name, device in self.devices.items():
+                row = dict(device); row["name"] = name
+                db_save_device(row)
             self._setbar("Devices auto-saved.")
         except Exception as _e:
             self._setbar(f"Auto-save failed: {_e}")
 
     def _dev_save(self):
+        if not self._ensure_role("admin"): return
         sk={"_name"}
         to_save={k:{kk:vv for kk,vv in v.items() if kk not in sk}
                   for k,v in self.devices.items()}
@@ -3808,12 +4078,15 @@ class App:
     def _exp_txt(self):
         if not self.current:
             messagebox.showinfo("No Data","Connect and run commands first."); return
-        fn=f"{sn(self.current)}_{STS}.txt"
-        if os.path.exists(fn):
+        log_data = session_log_bytes(self.current)
+        if log_data is not None:
+            fn=f"{sn(self.current)}_{STS}.txt"
             dest=filedialog.asksaveasfilename(defaultextension=".txt",
                 initialfile=fn,filetypes=[("Text","*.txt")])
-            if dest and dest!=fn: shutil.copy(fn,dest)
-            messagebox.showinfo("Exported",f"Saved: {fn}")
+            if dest:
+                with open(dest, "wb") as output:
+                    output.write(log_data)
+                messagebox.showinfo("Exported",f"Saved: {dest}")
         else: messagebox.showinfo("No Log","No session log yet.")
 
     def _exp_json(self):
@@ -3834,8 +4107,7 @@ class App:
 #      Alerts, Settings, User Login, Topology, Firmware Audit,
 #      AI Assistant, Plugin Runner, PDF/HTML Reports, SNMP polling
 # ─────────────────────────────────────────────────────────────────────────────
-import sqlite3, socket, ipaddress, platform, struct
-from threading import Event as TEvent
+import socket, ipaddress, platform, struct
 
 DB_FILE  = "netauto.db"
 PDF_DEPS = True   # set False if reportlab not installed
@@ -3903,11 +4175,40 @@ def db_init():
             severity TEXT DEFAULT 'warning'
         );
         """)
-        # Seed default admin user (password: admin)
-        import hashlib
-        pw = hashlib.sha256(b"admin").hexdigest()
-        c.execute("INSERT OR IGNORE INTO users (username,password_hash,role) VALUES (?,?,?)",
-                  ("admin", pw, "admin"))
+        # Existing installations may contain plaintext credentials.  Encrypt
+        # them in-place before the application reads any device records.
+        c.row_factory = sqlite3.Row
+        rows = c.execute("SELECT * FROM devices").fetchall()
+        for row in rows:
+            updates = {}
+            for field in secret_fields():
+                if field in row.keys() and row[field] and not is_encrypted(row[field]):
+                    updates[field] = protect_secret(row[field])
+            if updates:
+                c.execute(
+                    "UPDATE devices SET " + ",".join(f"{k}=?" for k in updates)
+                    + " WHERE id=?",
+                    (*updates.values(), row["id"]),
+                )
+        # Command output was historically stored as plaintext.  Encrypt it
+        # in-place before any normal application reads occur.
+        for row in c.execute("SELECT id,command,output FROM logs").fetchall():
+            updates = {}
+            for field in ("command", "output"):
+                if row[field] and not is_encrypted(row[field]):
+                    updates[field] = protect_secret(row[field])
+            if updates:
+                c.execute(
+                    "UPDATE logs SET " + ",".join(f"{k}=?" for k in updates)
+                    + " WHERE id=?",
+                    (*updates.values(), row["id"]),
+                )
+        bootstrap = os.environ.get("SHIKANET_ADMIN_PASSWORD")
+        if bootstrap and not c.execute("SELECT 1 FROM users LIMIT 1").fetchone():
+            c.execute(
+                "INSERT INTO users (username,password_hash,role) VALUES (?,?,?)",
+                ("admin", password_hash(bootstrap), "admin"),
+            )
         # Seed default compliance rules
         rules = [
             ("SSH Enabled",        "contains", "transport input ssh",    "critical"),
@@ -3921,8 +4222,9 @@ def db_init():
             rules)
 
 def db_save_device(d: dict):
-    cols = [k for k in d if k != "_name"]
-    vals = [d[k] for k in cols]
+    safe = protect_record({k: v for k, v in d.items() if k != "_name"})
+    cols = list(safe)
+    vals = [safe[k] for k in cols]
     ph   = ",".join("?"*len(cols))
     col_str = ",".join(cols)
     with db_conn() as c:
@@ -3931,11 +4233,11 @@ def db_save_device(d: dict):
 def db_load_devices() -> list:
     with db_conn() as c:
         c.row_factory = sqlite3.Row
-        return [dict(r) for r in c.execute("SELECT * FROM devices ORDER BY name")]
+        return [reveal_record(dict(r)) for r in c.execute("SELECT * FROM devices ORDER BY name")]
 
 def db_delete_device(name: str):
-    with db_conn() as c:
-        c.execute("DELETE FROM devices WHERE name=?", (name,))
+    return delete_device(name, db_path=DB_FILE, root_dir=os.getcwd(),
+                         backup_dir=BACKUP_DIR, scheduled_file=SCHED_FILE)
 
 def db_add_alert(device, severity, message):
     with db_conn() as c:
@@ -3956,7 +4258,26 @@ def db_ack_alert(aid):
 def db_log_cmd(device, cmd, output, user="local"):
     with db_conn() as c:
         c.execute("INSERT INTO logs (device,command,output,ts,user) VALUES (?,?,?,?,?)",
-                  (device, cmd, output[:5000], datetime.now().isoformat(), user))
+                  (device, protect_secret(cmd), protect_secret(output[:5000]),
+                   datetime.now().isoformat(), user))
+
+def db_get_logs(device=None, limit=500):
+    query = "SELECT * FROM logs"
+    params = ()
+    if device:
+        query += " WHERE device=?"
+        params = (device,)
+    query += " ORDER BY ts DESC LIMIT ?"
+    params += (limit,)
+    with db_conn() as c:
+        c.row_factory = sqlite3.Row
+        result = []
+        for row in c.execute(query, params):
+            item = dict(row)
+            item["command"] = reveal_secret(item["command"])
+            item["output"] = reveal_secret(item["output"])
+            result.append(item)
+        return result
 
 def db_get_templates():
     with db_conn() as c:
@@ -3977,20 +4298,23 @@ def db_delete_template(name):
 def db_get_setting(key, default=""):
     with db_conn() as c:
         row = c.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
-        return row[0] if row else default
+        value = row[0] if row else default
+        return reveal_secret(value) if key.lower().endswith(
+            ("password", "secret", "token", "api_key", "credential")
+        ) else value
 
 def db_set_setting(key, value):
+    if key.lower().endswith(("password", "secret", "token", "api_key", "credential")):
+        value = protect_secret(value)
     with db_conn() as c:
         c.execute("INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)", (key, value))
 
 def db_check_user(username, password):
-    import hashlib
-    pw = hashlib.sha256(password.encode()).hexdigest()
     with db_conn() as c:
         row = c.execute(
-            "SELECT role FROM users WHERE username=? AND password_hash=? AND active=1",
-            (username, pw)).fetchone()
-        return row[0] if row else None
+            "SELECT role,password_hash FROM users WHERE username=? AND active=1",
+            (username,)).fetchone()
+        return row[0] if row and password_matches(password, row[1]) else None
 
 def db_get_users():
     with db_conn() as c:
@@ -3998,11 +4322,9 @@ def db_get_users():
         return [dict(r) for r in c.execute("SELECT id,username,role,active FROM users")]
 
 def db_add_user(username, password, role="operator"):
-    import hashlib
-    pw = hashlib.sha256(password.encode()).hexdigest()
     with db_conn() as c:
         c.execute("INSERT OR REPLACE INTO users (username,password_hash,role) VALUES (?,?,?)",
-                  (username, pw, role))
+                  (username, password_hash(password), role))
 
 def db_get_compliance_rules():
     with db_conn() as c:
@@ -4027,7 +4349,6 @@ class LoginDlg(tk.Toplevel):
         f = ttk.Frame(self, padding=(30,0,30,0)); f.pack()
         ttk.Label(f, text="Username", font=(FONT_MONO,9,"bold")).grid(row=0,column=0,sticky=W,pady=4)
         self.u = ttk.Entry(f, font=(FONT_MONO,10), width=22); self.u.grid(row=0,column=1,padx=8,ipady=3)
-        self.u.insert(0,"admin")
         ttk.Label(f, text="Password", font=(FONT_MONO,9,"bold")).grid(row=1,column=0,sticky=W,pady=4)
         self.p = ttk.Entry(f, font=(FONT_MONO,10), width=22, show="*")
         self.p.grid(row=1,column=1,padx=8,ipady=3)
@@ -4121,7 +4442,7 @@ def run_compliance(running_config: str) -> list:
 # EXPORT — HTML + PDF (PDF via reportlab if available)
 # ─────────────────────────────────────────────────────────────────────────────
 def export_html(device: str, entries: list, notes: str = "") -> str:
-    fn = f"{sn(device)}_report_{STS}.html"
+    fn = f"{sn(device)}_report_{STS}.html.enc"
     rows = "".join(
         f"<tr><td>{e['timestamp']}</td>"
         f"<td><code>{e['command']}</code></td>"
@@ -4142,18 +4463,19 @@ pre{{margin:0;white-space:pre-wrap;font-size:11px}}
 {"<div class='notes'><b>Notes:</b><br>"+notes+"</div>" if notes else ""}
 <table><tr><th>Time</th><th>Command</th><th>Output</th></tr>{rows}</table>
 </body></html>"""
-    with open(fn, "w", encoding="utf-8") as f:
-        f.write(html)
+    write_artifact(fn, html.encode("utf-8"))
     return fn
 
 def export_pdf(device: str, entries: list, notes: str = "") -> str:
-    fn = f"{sn(device)}_report_{STS}.pdf"
+    fn = f"{sn(device)}_report_{STS}.pdf.enc"
     try:
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.styles import getSampleStyleSheet
         from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table
         from reportlab.lib import colors
-        doc  = SimpleDocTemplate(fn, pagesize=A4)
+        import io
+        buffer = io.BytesIO()
+        doc  = SimpleDocTemplate(buffer, pagesize=A4)
         st   = getSampleStyleSheet()
         els  = [Paragraph(f"ShikaNet Report — {device}", st["Title"]),
                 Paragraph(f"Generated: {datetime.now()}", st["Normal"]),
@@ -4171,6 +4493,7 @@ def export_pdf(device: str, entries: list, notes: str = "") -> str:
                     ("GRID",(0,0),(-1,-1),0.3,colors.gray)])
         els.append(t)
         doc.build(els)
+        write_artifact(fn, buffer.getvalue())
         return fn
     except ImportError:
         return export_html(device, entries, notes)  # fallback to HTML
@@ -4185,10 +4508,12 @@ class AppV9(App):
     def __init__(self, root, user_info):
         self._current_user  = user_info["username"]
         self._current_role  = user_info["role"]
+        self.role = self._current_role
         self._alert_count   = 0
         self._scan_stop     = TEvent()
         self._snmp_polling  = False
         self._topo_nodes    = {}
+        migrate_legacy_artifacts()
         db_init()
         # Load saved theme preference before building UI
         self._saved_theme = db_get_setting("theme", "darkly")
@@ -4548,7 +4873,7 @@ class AppV9(App):
             name = f"Discovered-{ip}"
             if name not in self.devices:
                 self.devices[name] = {
-                    "host":ip,"device_type":"cisco_ios","username":"admin",
+                    "host":ip,"device_type":"cisco_ios","username":"",
                     "password":"","port":22,"fast_cli":False,"key_file":"",
                     "jump_host":"","jump_username":"","jump_password":"",
                     "jump_port":22,"jump_device_type":"cisco_ios",
@@ -4932,6 +5257,11 @@ class AppV9(App):
             "console_ap_host","console_ap_user","console_ap_pass","console_cmd","console_dev_pass"}
         def work():
             for name,d in self.devices.items():
+                missing = missing_device_credentials(d)
+                if missing:
+                    self.root.after(0, lambda n=name, msg=missing:
+                        self._write(self.comp_out, f"✘ {n}: {msg}\n", "err"))
+                    continue
                 cfg_d = {k:v for k,v in d.items() if k not in JK}
                 if not cfg_d.get("key_file"): cfg_d.pop("key_file",None)
                 try:
@@ -4958,11 +5288,15 @@ class AppV9(App):
                                           initialfile="compliance_report.csv",
                                           filetypes=[("CSV","*.csv")])
         if not fn: return
-        with open(fn,"w",newline="",encoding="utf-8") as f:
-            w = csv.writer(f)
+        import io
+        output = io.StringIO(newline="")
+        with output:
+            w = csv.writer(output)
             w.writerow(["Rule","Passed","Severity","Expected"])
             for r in self._comp_results:
                 w.writerow([r["rule"], r["passed"], r["severity"], r["expected"]])
+        if not fn.endswith(".enc"): fn += ".enc"
+        write_artifact(fn, output.getvalue().encode("utf-8"))
         messagebox.showinfo("Exported", f"Saved: {fn}")
 
     def _compliance_rules(self):
@@ -5558,6 +5892,11 @@ class AppV9(App):
             "console_ap_host","console_ap_user","console_ap_pass","console_cmd","console_dev_pass"}
         def work():
             for name,d in self.devices.items():
+                missing = missing_device_credentials(d)
+                if missing:
+                    self.root.after(0, lambda n=name, msg=missing:
+                        self._write(self.fw_out, f"✘ {n}: {msg}\n", "err"))
+                    continue
                 cfg={k:v for k,v in d.items() if k not in JK}
                 if not cfg.get("key_file"): cfg.pop("key_file",None)
                 try:
@@ -5586,11 +5925,15 @@ class AppV9(App):
                                         initialfile="firmware_audit.csv",
                                         filetypes=[("CSV","*.csv")])
         if not fn: return
-        with open(fn,"w",newline="",encoding="utf-8") as f:
-            w=csv.writer(f)
+        import io
+        output = io.StringIO(newline="")
+        with output:
+            w=csv.writer(output)
             w.writerow(["Device","IOS Version","Model","EOL"])
             for r in self._fw_results:
                 w.writerow([r["device"],r.get("version",""),r.get("model",""),r.get("eol","")])
+        if not fn.endswith(".enc"): fn += ".enc"
+        write_artifact(fn, output.getvalue().encode("utf-8"))
         messagebox.showinfo("Exported",f"Saved: {fn}")
 
 
@@ -5837,9 +6180,9 @@ class AppV9(App):
                                     relief="flat", bd=0, padx=8, pady=6)
         self.plugin_code.pack(fill=BOTH, expand=True)
         self.plugin_code.insert("1.0",
-            "# Example: run a command and print output\n"
-            "output = send('show version')\n"
-            "write(box, output + '\\n')\n")
+            "# Safe plugin API: read-only commands and role-checked config pushes\n"
+            "output = plugin.send('show version')\n"
+            "plugin.write(output + '\\n')\n")
 
         ocard = ttk.Frame(r,bootstyle="dark",padding=(12,10)); ocard.pack(fill=BOTH,expand=True)
         self._shdr(ocard, "OUTPUT")
@@ -5861,22 +6204,29 @@ class AppV9(App):
         self._clr(self.plugin_out)
         self._write(self.plugin_out, "▶ Running script…\n\n","wrn")
         def work():
-            ctx = {
-                "conn":  self.conn,
-                "app":   self,
-                "send":  self._send,
-                "write": self._write,
-                "box":   self.plugin_out,
-                "devices": self.devices,
-                "current": self.current,
-            }
             try:
-                exec(compile(code,"<plugin>","exec"), ctx)
+                tree = ast.parse(code, filename="<plugin>", mode="exec")
+                _PluginValidator().visit(tree)
+                plugin = _PluginContext(
+                    send=self._send,
+                    write=lambda text: self.root.after(
+                        0, lambda: self._write(self.plugin_out, text)
+                    ),
+                    push=self._push_cfg,
+                    role=getattr(self, "_current_role", None),
+                    names=self.devices.keys(),
+                    current=self.current,
+                )
+                exec(
+                    compile(tree, "<plugin>", "exec"),
+                    {"__builtins__": {}},
+                    {"plugin": plugin},
+                )
                 self.root.after(0,lambda:self._write(self.plugin_out,"\n✔ Script completed.\n","ok"))
             except Exception as e:
-                import traceback
-                tb = traceback.format_exc()
-                self.root.after(0,lambda:self._write(self.plugin_out,f"\n✘ Error:\n{tb}\n","err"))
+                self.root.after(0, lambda: self._write(
+                    self.plugin_out, f"\n✘ Plugin rejected: {e}\n", "err"
+                ))
         threading.Thread(target=work, daemon=True).start()
 
     # ══════════════════════════════════════════════════════════════════════
