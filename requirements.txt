@@ -1,0 +1,10 @@
+cryptography>=42
+netmiko>=4
+paramiko>=3
+ttkbootstrap>=1.10
+pywebview>=5
+requests>=2
+pyserial>=3
+psutil>=5
+colorama>=0.4
+reportlab>=4
