@@ -1,0 +1,23 @@
+__pycache__/
+*.pyc
+build/
+dist/
+*.spec
+*.enc
+*.bak
+*.tmp
+*.log
+*.db
+*.sqlite
+*.sqlite3
+
+backups/
+reports/
+session_logs/
+audit_log.json
+devices_encrypted.json
+_generated_topology.html
+
+bug/
+outdated/
+ShikaNet v9/Reports received via Email option in ShikaNet/
