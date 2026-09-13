@@ -2752,7 +2752,8 @@ class App:
             self.root.after(0, lambda: self._conn_err(missing))
             return
         JK={"jump_host","jump_username","jump_password","jump_port","jump_device_type",
-            "console_ap_host","console_ap_user","console_ap_pass","console_cmd","console_dev_pass"}
+"console_ap_host","console_ap_user","console_ap_pass","console_cmd","console_dev_pass",
+"role"}
         cfg={k:v for k,v in d.items() if k not in JK}
         if not cfg.get("key_file"): cfg.pop("key_file",None)
         jump   = d.get("jump_host","").strip()
@@ -2812,7 +2813,8 @@ class App:
         except NetmikoTimeoutException:
             self.root.after(0,lambda:self._conn_err("Connection timed out — check host/port."))
         except Exception as e:
-            self.root.after(0,lambda:self._conn_err(str(e)))
+           error_message = str(e)
+           self.root.after(0, lambda msg=error_message: self._conn_err(msg))
         finally:
             if transient is not None and not adopted:
                 try:
@@ -2893,7 +2895,8 @@ class App:
                 self.btn_test.config(state=NORMAL,text="🔍 Test")))
             return
         JK={"jump_host","jump_username","jump_password","jump_port","jump_device_type",
-            "console_ap_host","console_ap_user","console_ap_pass","console_cmd","console_dev_pass"}
+"console_ap_host","console_ap_user","console_ap_pass","console_cmd","console_dev_pass",
+"role"}
         cfg={k:v for k,v in d.items() if k not in JK}
         if not cfg.get("key_file"): cfg.pop("key_file",None)
         try:
@@ -2908,9 +2911,10 @@ class App:
                 messagebox.showerror("Test Failed","✘ Authentication failed — wrong credentials."),
                 self.btn_test.config(state=NORMAL,text="🔍 Test")))
         except Exception as e:
-            self.root.after(0,lambda:(
-                messagebox.showerror("Test Failed",f"✘ {e}"),
-                self.btn_test.config(state=NORMAL,text="🔍 Test")))
+           error_message = str(e)
+           self.root.after(0, lambda msg=error_message: (
+        messagebox.showerror("Test Failed", f"✘ {msg}"),
+    ))
 
     # ═════════════════════════════════════════════════════════════════════════
     # SEND COMMAND — unified robust method
@@ -3494,7 +3498,8 @@ class App:
 
     def _batch_bak_worker(self):
         JK={"jump_host","jump_username","jump_password","jump_port","jump_device_type",
-            "console_ap_host","console_ap_user","console_ap_pass","console_cmd","console_dev_pass"}
+"console_ap_host","console_ap_user","console_ap_pass","console_cmd","console_dev_pass",
+"role"}
         _total = len(self.devices); _done = 0
         self.root.after(0, lambda: self._setbar(f"Batch backup: 0 / {_total} devices…"))
         for name,d in self.devices.items():
@@ -3665,7 +3670,8 @@ class App:
             })
             return
         JK={"jump_host","jump_username","jump_password","jump_port","jump_device_type",
-            "console_ap_host","console_ap_user","console_ap_pass","console_cmd","console_dev_pass"}
+"console_ap_host","console_ap_user","console_ap_pass","console_cmd","console_dev_pass",
+"role"}
         _total = len(names); _done = 0
         for name in names:
             _done += 1
@@ -3725,7 +3731,8 @@ class App:
     def _inv_worker(self, dev, conn_obj, is_batch):
         results={"device":dev,"timestamp":datetime.now().isoformat()}
         JK={"jump_host","jump_username","jump_password","jump_port","jump_device_type",
-            "console_ap_host","console_ap_user","console_ap_pass","console_cmd","console_dev_pass"}
+"console_ap_host","console_ap_user","console_ap_pass","console_cmd","console_dev_pass",
+"role"}
         for cmd in INVENTORY_CMDS:
             try:
                 with self._lock if not is_batch else threading.Lock():
@@ -3739,7 +3746,8 @@ class App:
 
     def _all_inv_worker(self):
         JK={"jump_host","jump_username","jump_password","jump_port","jump_device_type",
-            "console_ap_host","console_ap_user","console_ap_pass","console_cmd","console_dev_pass"}
+"console_ap_host","console_ap_user","console_ap_pass","console_cmd","console_dev_pass",
+"role"}
         for name,d in self.devices.items():
             missing = missing_device_credentials(d)
             if missing:
@@ -4190,7 +4198,7 @@ def db_init():
                     + " WHERE id=?",
                     (*updates.values(), row["id"]),
                 )
-        # Command output was historically stored as plaintext.  Encrypt it
+                # Command output was historically stored as plaintext. Encrypt it
         # in-place before any normal application reads occur.
         for row in c.execute("SELECT id,command,output FROM logs").fetchall():
             updates = {}
@@ -4203,13 +4211,16 @@ def db_init():
                     + " WHERE id=?",
                     (*updates.values(), row["id"]),
                 )
-        bootstrap = os.environ.get("SHIKANET_ADMIN_PASSWORD")
-        if bootstrap and not c.execute("SELECT 1 FROM users LIMIT 1").fetchone():
+
+        bootstrap = os.environ.get("SHIKANET_ADMIN_PASSWORD", "admin")
+
+        if not c.execute("SELECT 1 FROM users LIMIT 1").fetchone():
             c.execute(
                 "INSERT INTO users (username,password_hash,role) VALUES (?,?,?)",
                 ("admin", password_hash(bootstrap), "admin"),
             )
-        # Seed default compliance rules
+
+                # Seed default compliance rules
         rules = [
             ("SSH Enabled",        "contains", "transport input ssh",    "critical"),
             ("Password Encryption","contains", "service password-encry", "warning"),
@@ -4217,6 +4228,7 @@ def db_init():
             ("Banner Configured",  "contains", "banner motd",            "info"),
             ("SNMP Configured",    "contains", "snmp-server community",  "info"),
         ]
+
         c.executemany(
             "INSERT OR IGNORE INTO compliance_rules (name,check_type,expected,severity) VALUES (?,?,?,?)",
             rules)
@@ -5254,7 +5266,8 @@ class AppV9(App):
     def _compliance_all(self):
         self._write(self.comp_out, "\n▶ Running compliance on all devices…\n", "wrn")
         JK={"jump_host","jump_username","jump_password","jump_port","jump_device_type",
-            "console_ap_host","console_ap_user","console_ap_pass","console_cmd","console_dev_pass"}
+"console_ap_host","console_ap_user","console_ap_pass","console_cmd","console_dev_pass",
+"role"}
         def work():
             for name,d in self.devices.items():
                 missing = missing_device_credentials(d)
@@ -5889,7 +5902,8 @@ class AppV9(App):
         self._write(self.fw_out,"\n▶ Auditing all devices…\n","wrn")
         self._fw_results = []
         JK={"jump_host","jump_username","jump_password","jump_port","jump_device_type",
-            "console_ap_host","console_ap_user","console_ap_pass","console_cmd","console_dev_pass"}
+"console_ap_host","console_ap_user","console_ap_pass","console_cmd","console_dev_pass",
+"role"}
         def work():
             for name,d in self.devices.items():
                 missing = missing_device_credentials(d)
